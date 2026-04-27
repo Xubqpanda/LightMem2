@@ -1,4 +1,4 @@
-import type { ContextSegment } from "@ecoclaw/kernel";
+import type { ContextSegment } from "@tokenpilot/kernel";
 
 export type HistoryBlockType =
   | "tool_result"

@@ -1,4 +1,4 @@
-import type { TranscriptTurn } from "@ecoclaw/kernel";
+import type { TranscriptTurn } from "@tokenpilot/kernel";
 
 export type CanonicalMessageRole = "system" | "user" | "assistant" | "tool";
 

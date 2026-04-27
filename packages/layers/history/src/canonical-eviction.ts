@@ -5,7 +5,7 @@ import {
   archiveContent,
   buildRecoveryHint,
   readArchive,
-} from "@ecoclaw/runtime-core";
+} from "@tokenpilot/runtime-core";
 
 type RegistryLike = {
   evictableTaskIds: string[];
