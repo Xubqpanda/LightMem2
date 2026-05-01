@@ -382,6 +382,7 @@ def prepare_task_workspace(
     task: Task,
     agent_id: str,
     workspace_override: Path | None = None,
+    preserve_existing: bool = False,
 ) -> Path:
     """
     Prepare workspace for a task by copying fixtures.
@@ -399,9 +400,9 @@ def prepare_task_workspace(
         logger.warning("Could not find agent workspace, using fallback")
         workspace = Path(f"/tmp/pinchbench/{run_id}/{task.task_id}")
 
-    # Clear workspace before each task to prevent stale files from prior tasks
-    # from contaminating the agent's context.
-    if workspace.exists():
+    # In persistent-workspace mode we intentionally accumulate filesystem state
+    # across tasks. Otherwise, reset to a clean workspace.
+    if workspace.exists() and not preserve_existing:
         shutil.rmtree(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
 
@@ -1060,6 +1061,7 @@ def execute_openclaw_task(
             task=task,
             agent_id=agent_id,
             workspace_override=agent_workspace,
+            preserve_existing=(session_mode == "continuous"),
         )
         session_id = initial_session_id or f"{task.task_id}_{int(time.time() * 1000)}"
         timeout_seconds = task.timeout_seconds * timeout_multiplier

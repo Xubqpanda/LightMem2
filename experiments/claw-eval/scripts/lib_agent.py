@@ -969,9 +969,13 @@ def execute_task(
     config_path: Path,
     local: bool = True,
     max_attempts: int = 3,
+    agent_id_override: str | None = None,
+    workspace_dir_override: Path | None = None,
+    session_id_override: str | None = None,
+    preserve_workspace: bool = False,
 ) -> Dict[str, Any]:
     task_root = run_root / task.task_id
-    workspace_dir = task_root / "workspace"
+    workspace_dir = workspace_dir_override or (task_root / "workspace")
     logs_dir = task_root / "logs"
     task_root.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -980,14 +984,25 @@ def execute_task(
     for attempt in range(1, max(1, max_attempts) + 1):
         service_offset = (int(time.time() * 1000) % 1000) + (attempt * 1000)
         run_task = _task_with_available_service_ports(_task_with_service_port_offset(task, service_offset))
-        agent_id = _make_agent_id(model_id, task.task_id)
+        agent_id = agent_id_override or _make_agent_id(model_id, task.task_id)
         ensure_agent_exists(agent_id, model_id, workspace_dir, config_path, run_task)
-        _sanitize_workspace(workspace_dir)
+        if not preserve_workspace:
+            _sanitize_workspace(workspace_dir)
+        else:
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+            agents_md = workspace_dir / "AGENTS.md"
+            if not agents_md.exists():
+                agents_md.write_text(
+                    "# Benchmark Workspace\n\n"
+                    "This workspace is for benchmark execution only.\n"
+                    "Focus only on the current user task and use available tools to complete it.\n",
+                    encoding="utf-8",
+                )
         _inject_workspace_files(run_task, workspace_dir)
 
         handles: List[ServiceHandle] = []
         started_at = time.time()
-        session_id = f"{task.task_id}_{int(started_at*1000)}"
+        session_id = session_id_override or f"{task.task_id}_{int(started_at*1000)}"
         user_agent_cfg = (run_task.frontmatter.get("user_agent") or {}) if isinstance(run_task.frontmatter, dict) else {}
         ua_enabled = bool(user_agent_cfg.get("enabled"))
         ua_max_rounds = int(user_agent_cfg.get("max_rounds") or 0) if ua_enabled else 0

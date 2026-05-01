@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tasks-dir", default=str(Path(__file__).resolve().parents[1] / "dataset" / "tasks"))
     parser.add_argument("--suite", default="all")
     parser.add_argument("--phase", choices=["full", "generate", "eval"], default="full")
-    parser.add_argument("--session-mode", choices=["isolated"], default="isolated")
+    parser.add_argument("--session-mode", choices=["isolated", "continuous"], default="isolated")
     parser.add_argument("--model", default=None)
     parser.add_argument("--judge", default=None)
     parser.add_argument("--parallel", type=int, default=1)
@@ -358,8 +358,18 @@ def main() -> None:
                 run_root = output_dir / run_id
                 run_root.mkdir(parents=True, exist_ok=True)
                 selected_tasks = selected[: args.max_tasks] if args.max_tasks > 0 else selected
+                if args.session_mode == "continuous" and args.parallel != 1:
+                    raise SystemExit("--session-mode continuous requires --parallel 1")
                 print(f"[run] executing {len(selected_tasks)} tasks under {run_root}")
                 results = []
+                shared_agent_id = None
+                shared_workspace = None
+                shared_session_id = None
+                if args.session_mode == "continuous":
+                    model_slug = execution_model.replace("/", "-").replace(":", "-")
+                    shared_agent_id = f"ce-{model_slug}-serial"
+                    shared_workspace = run_root / "_continuous" / "workspace"
+                    shared_session_id = f"ce-continuous-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
                 for task in selected_tasks:
                     print(f"[task] {task.task_id} ({task.category})")
                     result = execute_task(
@@ -370,6 +380,10 @@ def main() -> None:
                         service_code_root=service_code_root,
                         config_path=config_path,
                         local=True,
+                        agent_id_override=shared_agent_id,
+                        workspace_dir_override=shared_workspace,
+                        session_id_override=shared_session_id,
+                        preserve_workspace=(args.session_mode == "continuous"),
                     )
                     grade = grade_execution_result(
                         task_yaml_path=task.task_yaml_path,
