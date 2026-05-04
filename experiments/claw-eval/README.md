@@ -42,27 +42,83 @@ See:
 
 - [dataset/general/README.md](dataset/general/README.md)
 
-## Minimal smoke command
+## Official runners
 
-A minimal isolated smoke from repo-internal paths looks like this:
+The public runner surface is intentionally small:
+
+- `scripts/run_baseline.sh`
+- `scripts/run_method.sh`
+
+These are the canonical entrypoints for open-source use.
+
+### Baseline
+
+Minimal isolated baseline smoke:
 
 ```bash
-cd /path/to/TokenPilot-repo-root
-TOKENPILOT_OPENCLAW_HOME=/path/to/openclaw-home \
-XDG_CACHE_HOME=/tmp/uv-cache \
-UV_CACHE_DIR=/tmp/uv-cache \
-PYTHONUNBUFFERED=1 \
-uv run --directory TokenPilot/experiments/claw-eval/vendor --with pyyaml \
-python -u TokenPilot/experiments/claw-eval/scripts/benchmark.py \
-  --tasks-dir TokenPilot/experiments/claw-eval/dataset/tasks \
+cd /path/to/TokenPilot
+bash experiments/claw-eval/scripts/run_baseline.sh \
+  --scope suite \
   --suite T001zh_email_triage \
   --session-mode isolated \
-  --parallel 1 \
-  --model ecoclaw/gpt-5.4-mini \
-  --judge ecoclaw/gpt-5.4-mini \
-  --apply-plugin-plan \
-  --execute-tasks
+  --model ecoclaw/gpt-5.4-mini
 ```
+
+Run all `general` tasks in isolated baseline mode:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/claw-eval/scripts/run_baseline.sh \
+  --scope general \
+  --session-mode isolated \
+  --model ecoclaw/gpt-5.4-mini
+```
+
+### Method
+
+Minimal isolated method smoke:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/claw-eval/scripts/run_method.sh \
+  --scope suite \
+  --suite T001zh_email_triage \
+  --session-mode isolated \
+  --profile reduction \
+  --model tokenpilot/gpt-5.4-mini
+```
+
+Run all `general` categories in continuous method mode:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/claw-eval/scripts/run_method.sh \
+  --scope general \
+  --session-mode continuous \
+  --profile plugin \
+  --by-category \
+  --model tokenpilot/gpt-5.4-mini
+```
+
+If your primary OpenClaw config is read-only or you want run-local isolation,
+add `--tmp-openclaw`:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/claw-eval/scripts/run_method.sh \
+  --scope general \
+  --session-mode continuous \
+  --profile plugin \
+  --by-category \
+  --tmp-openclaw \
+  --model tokenpilot/gpt-5.4-mini
+```
+
+## Legacy wrappers
+
+`run/` still contains a small set of compatibility wrappers for older internal
+entrypoints. New usage should prefer `scripts/run_baseline.sh` and
+`scripts/run_method.sh`.
 
 ## Current state
 
@@ -70,11 +126,12 @@ What is in good shape:
 
 - task loading and suite selection
 - isolated execution path
-- continuous baseline execution path
+- continuous execution path
 - upstream grader bridge
 - vendored upstream runtime code
 - vendored mock service plugins
 - repo-internal default paths for code, mock services, plugins, and `general` assets
+- unified baseline/method runner surface
 
 What is still operationally sensitive:
 
@@ -91,6 +148,7 @@ If the flat `general` bundle is missing, file-backed tasks will fail.
 ### 2. OpenClaw config pollution
 Previous runs can leave stale plugin allowlists or entries in `~/.openclaw/openclaw.json`.
 This can break both `claw-eval` and `pinchbench` runs.
+If you want a safer run-local copy, use `--tmp-openclaw` on the official runners.
 
 ### 3. Duplicate plugin ids
 If the same plugin exists both in the vendored `plugins/` directory and in a previously installed OpenClaw extension path, OpenClaw may warn about duplicate plugin ids.

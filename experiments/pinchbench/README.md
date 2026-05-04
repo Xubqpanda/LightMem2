@@ -40,9 +40,61 @@ The migration is now in an intermediate state:
     - `assets/`
     - `scripts/`
 - `scripts/`
-  - current home for the cleaned method-path and baseline wrapper surface
+  - current home for the official baseline/method runners and shared helpers
 - `save/`
   - reserved for local run outputs; only directory skeletons should be committed
+
+## Official runners
+
+The public runner surface is intentionally small:
+
+- `scripts/run_baseline.sh`
+- `scripts/run_method.sh`
+
+These are the canonical entrypoints for open-source use.
+
+### Baseline
+
+Minimal isolated baseline run:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/pinchbench/scripts/run_baseline.sh \
+  --suite automated-only \
+  --session-mode isolated \
+  --model gpt-5.4-mini
+```
+
+### Method
+
+Minimal isolated method run:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/pinchbench/scripts/run_method.sh \
+  --suite automated-only \
+  --session-mode isolated \
+  --model tokenpilot/gpt-5.4-mini
+```
+
+Continuous method run:
+
+```bash
+cd /path/to/TokenPilot
+bash experiments/pinchbench/scripts/run_method.sh \
+  --suite automated-only \
+  --session-mode continuous \
+  --model tokenpilot/gpt-5.4-mini
+```
+
+## Auxiliary runners
+
+The following scripts remain useful, but they are not the primary public API:
+
+- `scripts/run_experiment_matrix.sh`
+  - batch orchestration over multiple baseline/method cases
+- `scripts/run.sh`
+  - convenience wrapper that launches the default experiment matrix
 
 ## Immediate Goal
 
