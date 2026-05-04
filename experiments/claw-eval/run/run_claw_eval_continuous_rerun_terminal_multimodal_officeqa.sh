@@ -19,7 +19,8 @@ run_suite() {
   local name="$1"
   local suite="$2"
   echo "[group] starting ${name} at $(date '+%F %T')"
-  TOKENPILOT_OPENCLAW_HOME=/mnt/20t/xubuqiang \
+  OPENCLAW_CONFIG_PATH=/home/xubuqiang/.openclaw/openclaw.json \
+  TOKENPILOT_OPENCLAW_HOME=/home/xubuqiang \
   CLAW_EVAL_SOURCE_ROOT="$UPSTREAM_ROOT" \
   XDG_CACHE_HOME=/tmp/uv-cache \
   UV_CACHE_DIR=/tmp/uv-cache \
@@ -32,6 +33,7 @@ run_suite() {
     --parallel 1 \
     --model "$MODEL" \
     --judge "$JUDGE" \
+    --openclaw-config-path /home/xubuqiang/.openclaw/openclaw.json \
     --apply-plugin-plan \
     --execute-tasks
   echo "[group] finished ${name} at $(date '+%F %T')"

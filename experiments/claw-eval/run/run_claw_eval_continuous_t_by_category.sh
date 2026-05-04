@@ -12,7 +12,8 @@ BENCH_PY="${CLAW_EVAL_REPO_ROOT}/scripts/benchmark.py"
 TASKS_DIR="${CLAW_EVAL_REPO_ROOT}/dataset/tasks"
 SOURCE_DIR="${CLAW_EVAL_REPO_ROOT}/vendor"
 
-export TOKENPILOT_OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-/mnt/20t/xubuqiang}"
+export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-/home/xubuqiang/.openclaw/openclaw.json}"
+export TOKENPILOT_OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-/home/xubuqiang}"
 export CLAW_EVAL_SOURCE_ROOT="${CLAW_EVAL_SOURCE_ROOT:-${SOURCE_DIR}}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/uv-cache}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
@@ -59,6 +60,7 @@ PY
       --parallel 1 \
       --model "${MODEL}" \
       --judge "${MODEL}" \
+      --openclaw-config-path "${OPENCLAW_CONFIG_PATH}" \
       --apply-plugin-plan \
       --execute-tasks \
       ${EXTRA_ARGS}

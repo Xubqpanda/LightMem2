@@ -21,7 +21,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib_agent import ensure_agent_exists, execute_task
+from lib_agent import ensure_agent_exists, execute_task, patch_agent_tool_restrictions_for_tasks
 from lib_grading import grade_execution_result
 from lib_services import (
     activate_plugins_for_run,
@@ -449,6 +449,11 @@ def main() -> None:
                             shared_workspace,
                             config_path,
                             selected_tasks[0],
+                        )
+                        patch_agent_tool_restrictions_for_tasks(
+                            shared_agent_id,
+                            selected_tasks,
+                            config_path,
                         )
                 for task in selected_tasks:
                     print(f"[task] {task.task_id} ({task.category})")

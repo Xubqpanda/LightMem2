@@ -36,7 +36,8 @@ CATS=(
 run_all() {
   for cat in "${CATS[@]}"; do
     echo "[category] starting ${cat} at $(date '+%F %T')"
-    TOKENPILOT_OPENCLAW_HOME=/mnt/20t/xubuqiang \
+    OPENCLAW_CONFIG_PATH=/home/xubuqiang/.openclaw/openclaw.json \
+    TOKENPILOT_OPENCLAW_HOME=/home/xubuqiang \
     CLAW_EVAL_SOURCE_ROOT="$UPSTREAM_ROOT" \
     XDG_CACHE_HOME=/tmp/uv-cache \
     UV_CACHE_DIR=/tmp/uv-cache \
@@ -49,6 +50,7 @@ run_all() {
       --parallel 1 \
       --model "$MODEL" \
       --judge "$JUDGE" \
+      --openclaw-config-path /home/xubuqiang/.openclaw/openclaw.json \
       --apply-plugin-plan \
       --execute-tasks
     echo "[category] finished ${cat} at $(date '+%F %T')"

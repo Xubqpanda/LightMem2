@@ -23,9 +23,10 @@ REPO_DIR="${CLAW_EVAL_REPO_ROOT}/../.."
 BENCH_PY="${CLAW_EVAL_REPO_ROOT}/scripts/benchmark.py"
 TASKS_DIR="${CLAW_EVAL_REPO_ROOT}/dataset/tasks"
 SOURCE_DIR="${CLAW_EVAL_REPO_ROOT}/vendor"
-OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-/mnt/20t/xubuqiang}"
+OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-/home/xubuqiang}"
 OPENCLAW_CONFIG="${OPENCLAW_HOME}/.openclaw/openclaw.json"
 
+export OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${OPENCLAW_CONFIG}}"
 export TOKENPILOT_OPENCLAW_HOME="${OPENCLAW_HOME}"
 export CLAW_EVAL_SOURCE_ROOT="${CLAW_EVAL_SOURCE_ROOT:-${SOURCE_DIR}}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/uv-cache}"
@@ -97,6 +98,7 @@ run_one() {
       --parallel 1 \
       --model "${MODEL}" \
       --judge "${JUDGE_MODEL}" \
+      --openclaw-config-path "${OPENCLAW_CONFIG_PATH}" \
       --apply-plugin-plan \
       --execute-tasks \
       ${EXTRA_ARGS}

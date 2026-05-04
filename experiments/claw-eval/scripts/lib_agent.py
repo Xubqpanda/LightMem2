@@ -17,7 +17,7 @@ import urllib.request
 from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse, urlunparse
 
 from lib_tasks import ClawEvalTask
@@ -216,6 +216,53 @@ def _patch_agent_tool_restrictions(agent_id: str, task: ClawEvalTask, config_pat
     entries = agents.setdefault("list", [])
 
     allowed_tools = sorted(set(task.declared_tools) | {"write", "edit"})
+    denied_tools = [
+        "read",
+        "exec",
+        "process",
+        "browser",
+        "web_search",
+        "web_fetch",
+        "pdf",
+        "image",
+        "memory_search",
+        "memory_get",
+        "sessions_list",
+        "sessions_history",
+        "session_status",
+    ]
+
+    for entry in entries:
+        if entry.get("id") != agent_id:
+            continue
+        entry["tools"] = {
+            "allow": allowed_tools,
+            "deny": denied_tools,
+        }
+        entry.pop("skills", None)
+        break
+
+    config_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def patch_agent_tool_restrictions_for_tasks(
+    agent_id: str,
+    tasks: Iterable[ClawEvalTask],
+    config_path: Path,
+) -> None:
+    cfg = _read_json_with_retry(config_path)
+    agents = cfg.setdefault("agents", {})
+    entries = agents.setdefault("list", [])
+
+    allowed_tools = sorted(
+        {
+            tool_name
+            for task in tasks
+            for tool_name in task.declared_tools
+            if tool_name
+        }
+        | {"write", "edit"}
+    )
     denied_tools = [
         "read",
         "exec",
