@@ -9,18 +9,18 @@ source "${EXPERIMENT_ROOT}/scripts/common.sh"
 ce_import_runtime_envs
 ce_normalize_runtime_env
 
-TUZI_BASE_URL="${TUZI_BASE_URL:-https://coding.tu-zi.com/v1}"
-TUZI_API_KEY="${TUZI_API_KEY:-}"
-MODEL="${CLAW_EVAL_MODEL:-tuzi/gpt-5.4-mini}"
+KUAIPAO_BASE_URL="${KUAIPAO_BASE_URL:-https://kuaipao.ai/v1}"
+KUAIPAO_API_KEY="${KUAIPAO_API_KEY:-}"
+MODEL="${CLAW_EVAL_MODEL:-kuaipao/gpt-5.4-mini}"
 JUDGE_MODEL="${CLAW_EVAL_JUDGE_MODEL:-${MODEL}}"
 
-if [[ -z "${TUZI_API_KEY}" ]]; then
-  echo "Missing TUZI_API_KEY in environment." >&2
+if [[ -z "${KUAIPAO_API_KEY}" ]]; then
+  echo "Missing KUAIPAO_API_KEY in environment." >&2
   exit 2
 fi
 
-echo "[0/2] ensure tuzi upstream provider in ${OPENCLAW_CONFIG_PATH}"
-ce_ensure_openai_responses_provider "tuzi" "${TUZI_BASE_URL}" "${TUZI_API_KEY}"
+echo "[0/2] ensure kuaipao upstream provider in ${OPENCLAW_CONFIG_PATH}"
+ce_ensure_openai_responses_provider "kuaipao" "${KUAIPAO_BASE_URL}" "${KUAIPAO_API_KEY}"
 
 echo "[1/2] run claw-eval continuous t-general with memory distill-only"
 CLAW_EVAL_MODEL="${MODEL}" \
