@@ -13,7 +13,7 @@ fi
 
 MEETING_SUITE="${PINCHBENCH_MEETING_SUITE:-task_meeting_advisory_acronyms,task_meeting_advisory_attendees,task_meeting_advisory_stakeholders,task_meeting_advisory_technical,task_meeting_advisory_timeline,task_meeting_blog_post,task_meeting_council_budget,task_meeting_council_contact_info,task_meeting_council_neighborhood,task_meeting_council_public_comment,task_meeting_council_upcoming,task_meeting_council_votes,task_meeting_executive_summary,task_meeting_follow_up_email,task_meeting_gov_controversy,task_meeting_gov_data_sources,task_meeting_gov_next_steps,task_meeting_gov_qa_extract,task_meeting_gov_recommendations,task_meeting_gov_speaker_summary,task_meeting_searchable_index,task_meeting_sentiment_analysis,task_meeting_tech_action_items,task_meeting_tech_competitors,task_meeting_tech_decisions,task_meeting_tech_messaging,task_meeting_tech_product_features,task_meeting_tldr}"
 OUTPUT_DIR="${PINCHBENCH_MEETING_OUTPUT_DIR:-${PINCHBENCH_ROOT}/save/continuous/method/meeting_turnbatch_4}"
-OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-/home/xubuqiang}"
+OPENCLAW_HOME="${TOKENPILOT_OPENCLAW_HOME:-${HOME}}"
 OPENCLAW_CFG="${OPENCLAW_CONFIG_PATH:-${OPENCLAW_HOME}/.openclaw/openclaw.json}"
 PINCHBENCH_TMP_ROOT="${PINCHBENCH_TMP_ROOT:-/tmp/pinchbench_meeting_turnbatch_4}"
 METHOD_MODEL="${TOKENPILOT_MODEL:-tokenpilot/gpt-5.4-mini}"
