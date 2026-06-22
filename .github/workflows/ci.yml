@@ -41,5 +41,14 @@ jobs:
       - name: Test OpenClaw adapter
         run: npm --prefix components/tokenpilot/adapters/openclaw test
 
+      - name: Test host adapter package
+        run: npm --prefix components/tokenpilot/packages/host-adapter test
+
       - name: Test decision package
         run: npm --prefix components/tokenpilot/packages/layers/decision test
+
+      - name: Test runtime core package
+        run: npm --prefix components/tokenpilot/packages/runtime-core test
+
+      - name: Test product surface package
+        run: npm --prefix components/tokenpilot/packages/product-surface test
