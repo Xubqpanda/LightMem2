@@ -5,7 +5,6 @@ import type {
   TokenPilotProductSurfaceHostBridge,
 } from "@tokenpilot/host-adapter";
 import {
-  createProductSurfaceCommandHandler,
   getNestedValue,
   formatDisplayValue,
   formatOnOff,
@@ -29,7 +28,12 @@ import {
 } from "../../../../adapters/codex/src/session-state.js";
 import { renderCodexSessionVisual } from "../../../../adapters/codex/src/session-visual.js";
 import { readCodexUxSessionAggregate, readLatestCodexUxEffect } from "../../../../adapters/codex/src/ux-effects.js";
-import { buildSessionReportResult, resolvePreferredSessionId } from "./shared.js";
+import {
+  applyStandardRuntimeModeConfig,
+  buildSessionReportResult,
+  createRestrictedHostCommandHandler,
+  resolvePreferredSessionId,
+} from "./shared.js";
 
 const CODEX_REDUCTION_PASS_NAMES = [
   "readStateCompaction",
@@ -78,63 +82,6 @@ async function resolveCodexCliSessionId(params: {
   });
 }
 
-function splitArgs(raw: string): string[] {
-  return raw.split(/\s+/).map((part) => part.trim()).filter(Boolean);
-}
-
-function formatCodexReductionHelp(): string {
-  return [
-    "Observation Reduction commands (Codex):",
-    "lightmem2 codex reduction",
-    "lightmem2 codex reduction on",
-    "lightmem2 codex reduction off",
-    "lightmem2 codex reduction mode <light|balanced|aggressive>",
-    "lightmem2 codex reduction pass <name> <on|off>",
-    "lightmem2 codex reduction set <triggerMinChars|maxToolChars> <number>",
-    "",
-    "Supported pass names:",
-    ...CODEX_REDUCTION_PASS_NAMES.map((name) => `- ${name}`),
-  ].join("\n");
-}
-
-function formatCodexHelp(section?: string): string {
-  if (section === "stabilizer") {
-    return [
-      "Prefix Stabilization commands (Codex):",
-      "lightmem2 codex stabilizer",
-      "lightmem2 codex stabilizer on",
-      "lightmem2 codex stabilizer off",
-      "lightmem2 codex stabilizer target <developer|user>",
-      "",
-      "Supported knobs:",
-      "- modules.stabilizer",
-      "- hooks.dynamicContextTarget",
-    ].join("\n");
-  }
-
-  if (section === "reduction") {
-    return formatCodexReductionHelp();
-  }
-
-  return [
-    "LightMem2 Codex commands:",
-    "",
-    "lightmem2 codex status",
-    "lightmem2 codex report",
-    "lightmem2 codex doctor",
-    "lightmem2 codex visual",
-    "lightmem2 codex mode <conservative|normal>",
-    "lightmem2 codex stabilizer ...",
-    "lightmem2 codex reduction ...",
-    "",
-    "Not supported on Codex yet:",
-    "- settings ...",
-    "- eviction ...",
-    "- mode aggressive",
-    "- stabilizer hook ...",
-  ].join("\n");
-}
-
 function formatCodexStatus(currentConfig: Record<string, unknown>): string {
   return [
     "TokenPilot Codex status:",
@@ -149,65 +96,9 @@ function formatCodexStatus(currentConfig: Record<string, unknown>): string {
   ].join("\n");
 }
 
-function formatCodexStabilizerStatus(currentConfig: Record<string, unknown>): string {
-  return [
-    "Prefix Stabilization (Codex):",
-    `- enabled: ${formatOnOff(getNestedValue(currentConfig, ["modules", "stabilizer"]))}`,
-    `- dynamicContextTarget: ${formatDisplayValue(getNestedValue(currentConfig, ["hooks", "dynamicContextTarget"]))}`,
-  ].join("\n");
-}
-
-function formatCodexReductionStatus(currentConfig: Record<string, unknown>): string {
-  const passFlags = CODEX_REDUCTION_PASS_NAMES
-    .map((name) => `${name}=${formatOnOff(getNestedValue(currentConfig, ["reduction", "passes", name]))}`)
-    .join(", ");
-  return [
-    "Observation Reduction (Codex):",
-    `- enabled: ${formatOnOff(getNestedValue(currentConfig, ["modules", "reduction"]))}`,
-    `- triggerMinChars: ${formatDisplayValue(getNestedValue(currentConfig, ["reduction", "triggerMinChars"]))}`,
-    `- maxToolChars: ${formatDisplayValue(getNestedValue(currentConfig, ["reduction", "maxToolChars"]))}`,
-    `- passes: ${passFlags}`,
-  ].join("\n");
-}
-
-function isCodexReductionPassName(value: string): value is typeof CODEX_REDUCTION_PASS_NAMES[number] {
-  return (CODEX_REDUCTION_PASS_NAMES as readonly string[]).includes(value);
-}
-
-function codexModePreset(mode: "conservative" | "normal"): {
-  triggerMinChars: number;
-  maxToolChars: number;
-} {
-  if (mode === "conservative") {
-    return {
-      triggerMinChars: 4000,
-      maxToolChars: 1800,
-    };
-  }
-  return {
-    triggerMinChars: 2200,
-    maxToolChars: 1200,
-  };
-}
-
 async function applyCodexMode(mode: "conservative" | "normal"): Promise<void> {
   const current = await loadConfig();
-  const { triggerMinChars, maxToolChars } = codexModePreset(mode);
-  const next: Record<string, unknown> = {
-    ...current,
-    enabled: true,
-    modules: {
-      ...(typeof current.modules === "object" && current.modules ? current.modules as Record<string, unknown> : {}),
-      stabilizer: true,
-      reduction: true,
-    },
-    reduction: {
-      ...(typeof current.reduction === "object" && current.reduction ? current.reduction as Record<string, unknown> : {}),
-      triggerMinChars,
-      maxToolChars,
-    },
-  };
-  await writeConfig(next);
+  await writeConfig(applyStandardRuntimeModeConfig(current, mode));
 }
 
 export function createCodexCliBridge(target: {
@@ -264,84 +155,16 @@ export function createCodexCliBridge(target: {
     },
   };
 
-  const sharedHandler = createProductSurfaceCommandHandler({
+  const handleCommand = createRestrictedHostCommandHandler({
+    displayName: "Codex",
+    cliHostName: "codex",
+    reductionPassNames: CODEX_REDUCTION_PASS_NAMES,
     bridge,
     configAdapter: codexProductSurfaceConfigAdapter,
+    loadConfig,
+    formatStatus: formatCodexStatus,
+    applyMode: applyCodexMode,
   });
-
-  async function handleCommand(ctx: { args: string; sessionId?: string }): Promise<{ text: string }> {
-    const args = splitArgs(ctx.args);
-    const action = args[0]?.toLowerCase() ?? "";
-
-    if (!action) {
-      return { text: `${formatCodexStatus(await loadConfig())}\n\n${formatCodexHelp()}` };
-    }
-
-    if (action === "help") {
-      return { text: formatCodexHelp(args[1]?.toLowerCase()) };
-    }
-
-    if (action === "status") {
-      return { text: formatCodexStatus(await loadConfig()) };
-    }
-
-    if (action === "report" || action === "doctor" || action === "visual") {
-      return sharedHandler(ctx);
-    }
-
-    if (action === "reduction") {
-      const sub = args[1]?.toLowerCase() ?? "";
-      if (!sub || sub === "status" || sub === "show") {
-        return { text: formatCodexReductionStatus(await loadConfig()) };
-      }
-      if (sub === "help") {
-        return { text: formatCodexReductionHelp() };
-      }
-      if (sub === "pass") {
-        const passName = args[2] ?? "";
-        if (!isCodexReductionPassName(passName)) {
-          return { text: `Codex reduction supports only these passes: ${CODEX_REDUCTION_PASS_NAMES.join(", ")}` };
-        }
-      }
-      return sharedHandler(ctx);
-    }
-
-    if (action === "stabilizer") {
-      const sub = args[1]?.toLowerCase() ?? "";
-      if (!sub || sub === "status" || sub === "show") {
-        return { text: formatCodexStabilizerStatus(await loadConfig()) };
-      }
-      if (sub === "help") {
-        return { text: formatCodexHelp("stabilizer") };
-      }
-      if (sub === "on" || sub === "off" || sub === "target") {
-        return sharedHandler(ctx);
-      }
-      return { text: "Codex currently supports only `stabilizer on|off` and `stabilizer target <developer|user>`." };
-    }
-
-    if (action === "mode") {
-      const mode = args[1]?.toLowerCase() ?? "";
-      if (mode === "conservative" || mode === "normal") {
-        await applyCodexMode(mode);
-        return { text: `✅ Runtime mode = ${mode}` };
-      }
-      if (mode === "aggressive") {
-        return { text: "Codex does not support lifecycle eviction mode. Use `mode normal` or `mode conservative`." };
-      }
-      return { text: "Usage: lightmem2 codex mode <conservative|normal>" };
-    }
-
-    if (action === "settings") {
-      return { text: "Codex does not expose shared runtime settings yet." };
-    }
-
-    if (action === "eviction") {
-      return { text: "Codex lifecycle eviction controls are not supported." };
-    }
-
-    return { text: "Unsupported Codex command. Supported commands: status, report, doctor, visual, mode <conservative|normal>, reduction ..., stabilizer on|off|target." };
-  }
 
   return {
     bridge,

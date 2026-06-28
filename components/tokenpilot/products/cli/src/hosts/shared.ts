@@ -1,5 +1,12 @@
-import type { TokenPilotProductSurfaceConfigAdapter, TokenPilotProductCommandResult } from "@tokenpilot/host-adapter";
+import type {
+  TokenPilotProductSurfaceConfigAdapter,
+  TokenPilotProductCommandResult,
+  TokenPilotProductSurfaceHostBridge,
+} from "@tokenpilot/host-adapter";
 import {
+  createProductSurfaceCommandHandler,
+  formatDisplayValue,
+  formatOnOff,
   formatSessionReport,
   getNestedValue,
   type ProductSurfaceLatestUxEffect,
@@ -13,6 +20,51 @@ type LatestUxEffectWithSessionId = ProductSurfaceLatestUxEffect & {
 function normalizeSessionId(value: unknown): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   return text || undefined;
+}
+
+export function splitCommandArgs(raw: string): string[] {
+  return raw.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+}
+
+export function standardReductionModePreset(mode: "conservative" | "normal"): {
+  triggerMinChars: number;
+  maxToolChars: number;
+} {
+  if (mode === "conservative") {
+    return {
+      triggerMinChars: 4000,
+      maxToolChars: 1800,
+    };
+  }
+  return {
+    triggerMinChars: 2200,
+    maxToolChars: 1200,
+  };
+}
+
+export function applyStandardRuntimeModeConfig(
+  currentConfig: Record<string, unknown>,
+  mode: "conservative" | "normal",
+): Record<string, unknown> {
+  const { triggerMinChars, maxToolChars } = standardReductionModePreset(mode);
+  return {
+    ...currentConfig,
+    enabled: true,
+    modules: {
+      ...(typeof currentConfig.modules === "object" && currentConfig.modules
+        ? currentConfig.modules as Record<string, unknown>
+        : {}),
+      stabilizer: true,
+      reduction: true,
+    },
+    reduction: {
+      ...(typeof currentConfig.reduction === "object" && currentConfig.reduction
+        ? currentConfig.reduction as Record<string, unknown>
+        : {}),
+      triggerMinChars,
+      maxToolChars,
+    },
+  };
 }
 
 export async function resolvePreferredSessionId(params: {
@@ -64,5 +116,227 @@ export async function buildSessionReportResult(params: {
       latest,
       detailsEnabled,
     }),
+  };
+}
+
+export function formatRestrictedHostHelp(params: {
+  displayName: string;
+  cliHostName: string;
+  section?: string;
+  reductionPassNames: readonly string[];
+}): string {
+  if (params.section === "stabilizer") {
+    return [
+      `Prefix Stabilization commands (${params.displayName}):`,
+      `lightmem2 ${params.cliHostName} stabilizer`,
+      `lightmem2 ${params.cliHostName} stabilizer on`,
+      `lightmem2 ${params.cliHostName} stabilizer off`,
+      `lightmem2 ${params.cliHostName} stabilizer target <developer|user>`,
+      "",
+      "Supported knobs:",
+      "- modules.stabilizer",
+      "- hooks.dynamicContextTarget",
+    ].join("\n");
+  }
+
+  if (params.section === "reduction") {
+    return [
+      `Observation Reduction commands (${params.displayName}):`,
+      `lightmem2 ${params.cliHostName} reduction`,
+      `lightmem2 ${params.cliHostName} reduction on`,
+      `lightmem2 ${params.cliHostName} reduction off`,
+      `lightmem2 ${params.cliHostName} reduction mode <light|balanced|aggressive>`,
+      `lightmem2 ${params.cliHostName} reduction pass <name> <on|off>`,
+      `lightmem2 ${params.cliHostName} reduction set <triggerMinChars|maxToolChars> <number>`,
+      "",
+      "Supported pass names:",
+      ...params.reductionPassNames.map((name) => `- ${name}`),
+    ].join("\n");
+  }
+
+  return [
+    `LightMem2 ${params.displayName} commands:`,
+    "",
+    `lightmem2 ${params.cliHostName} status`,
+    `lightmem2 ${params.cliHostName} report`,
+    `lightmem2 ${params.cliHostName} doctor`,
+    `lightmem2 ${params.cliHostName} visual`,
+    `lightmem2 ${params.cliHostName} mode <conservative|normal>`,
+    `lightmem2 ${params.cliHostName} stabilizer ...`,
+    `lightmem2 ${params.cliHostName} reduction ...`,
+    "",
+    `Not supported on ${params.displayName} yet:`,
+    "- settings ...",
+    "- eviction ...",
+    "- mode aggressive",
+    "- stabilizer hook ...",
+  ].join("\n");
+}
+
+export function formatRestrictedHostStabilizerStatus(
+  displayName: string,
+  currentConfig: Record<string, unknown>,
+): string {
+  return [
+    `Prefix Stabilization (${displayName}):`,
+    `- enabled: ${formatOnOff(getNestedValue(currentConfig, ["modules", "stabilizer"]))}`,
+    `- dynamicContextTarget: ${formatDisplayValue(getNestedValue(currentConfig, ["hooks", "dynamicContextTarget"]))}`,
+  ].join("\n");
+}
+
+export function formatRestrictedHostReductionStatus(
+  displayName: string,
+  currentConfig: Record<string, unknown>,
+  reductionPassNames: readonly string[],
+): string {
+  const passFlags = reductionPassNames
+    .map((name) => `${name}=${formatOnOff(getNestedValue(currentConfig, ["reduction", "passes", name]))}`)
+    .join(", ");
+  return [
+    `Observation Reduction (${displayName}):`,
+    `- enabled: ${formatOnOff(getNestedValue(currentConfig, ["modules", "reduction"]))}`,
+    `- triggerMinChars: ${formatDisplayValue(getNestedValue(currentConfig, ["reduction", "triggerMinChars"]))}`,
+    `- maxToolChars: ${formatDisplayValue(getNestedValue(currentConfig, ["reduction", "maxToolChars"]))}`,
+    `- passes: ${passFlags}`,
+  ].join("\n");
+}
+
+export function createRestrictedHostCommandHandler(params: {
+  displayName: string;
+  cliHostName: string;
+  reductionPassNames: readonly string[];
+  bridge: TokenPilotProductSurfaceHostBridge;
+  configAdapter: TokenPilotProductSurfaceConfigAdapter;
+  loadConfig(): Promise<Record<string, unknown>>;
+  formatStatus(currentConfig: Record<string, unknown>): string;
+  applyMode(mode: "conservative" | "normal"): Promise<void>;
+}): (ctx: { args: string; sessionId?: string }) => Promise<{ text: string }> {
+  const sharedHandler = createProductSurfaceCommandHandler({
+    bridge: params.bridge,
+    configAdapter: params.configAdapter,
+  });
+
+  function isReductionPassName(value: string): boolean {
+    return params.reductionPassNames.includes(value);
+  }
+
+  return async function handleCommand(ctx: {
+    args: string;
+    sessionId?: string;
+  }): Promise<{ text: string }> {
+    const args = splitCommandArgs(ctx.args);
+    const action = args[0]?.toLowerCase() ?? "";
+
+    if (!action) {
+      return {
+        text: `${params.formatStatus(await params.loadConfig())}\n\n${formatRestrictedHostHelp({
+          displayName: params.displayName,
+          cliHostName: params.cliHostName,
+          reductionPassNames: params.reductionPassNames,
+        })}`,
+      };
+    }
+
+    if (action === "help") {
+      return {
+        text: formatRestrictedHostHelp({
+          displayName: params.displayName,
+          cliHostName: params.cliHostName,
+          section: args[1]?.toLowerCase(),
+          reductionPassNames: params.reductionPassNames,
+        }),
+      };
+    }
+
+    if (action === "status") {
+      return { text: params.formatStatus(await params.loadConfig()) };
+    }
+
+    if (action === "report" || action === "doctor" || action === "visual") {
+      return sharedHandler(ctx);
+    }
+
+    if (action === "reduction") {
+      const sub = args[1]?.toLowerCase() ?? "";
+      if (!sub || sub === "status" || sub === "show") {
+        return {
+          text: formatRestrictedHostReductionStatus(
+            params.displayName,
+            await params.loadConfig(),
+            params.reductionPassNames,
+          ),
+        };
+      }
+      if (sub === "help") {
+        return {
+          text: formatRestrictedHostHelp({
+            displayName: params.displayName,
+            cliHostName: params.cliHostName,
+            section: "reduction",
+            reductionPassNames: params.reductionPassNames,
+          }),
+        };
+      }
+      if (sub === "pass") {
+        const passName = args[2] ?? "";
+        if (!isReductionPassName(passName)) {
+          return {
+            text: `${params.displayName} reduction supports only these passes: ${params.reductionPassNames.join(", ")}`,
+          };
+        }
+      }
+      return sharedHandler(ctx);
+    }
+
+    if (action === "stabilizer") {
+      const sub = args[1]?.toLowerCase() ?? "";
+      if (!sub || sub === "status" || sub === "show") {
+        return {
+          text: formatRestrictedHostStabilizerStatus(params.displayName, await params.loadConfig()),
+        };
+      }
+      if (sub === "help") {
+        return {
+          text: formatRestrictedHostHelp({
+            displayName: params.displayName,
+            cliHostName: params.cliHostName,
+            section: "stabilizer",
+            reductionPassNames: params.reductionPassNames,
+          }),
+        };
+      }
+      if (sub === "on" || sub === "off" || sub === "target") {
+        return sharedHandler(ctx);
+      }
+      return {
+        text: `${params.displayName} currently supports only \`stabilizer on|off\` and \`stabilizer target <developer|user>\`.`,
+      };
+    }
+
+    if (action === "mode") {
+      const mode = args[1]?.toLowerCase() ?? "";
+      if (mode === "conservative" || mode === "normal") {
+        await params.applyMode(mode);
+        return { text: `✅ Runtime mode = ${mode}` };
+      }
+      if (mode === "aggressive") {
+        return {
+          text: `${params.displayName} does not support lifecycle eviction mode. Use \`mode normal\` or \`mode conservative\`.`,
+        };
+      }
+      return { text: `Usage: lightmem2 ${params.cliHostName} mode <conservative|normal>` };
+    }
+
+    if (action === "settings") {
+      return { text: `${params.displayName} does not expose shared runtime settings yet.` };
+    }
+
+    if (action === "eviction") {
+      return { text: `${params.displayName} lifecycle eviction controls are not supported.` };
+    }
+
+    return {
+      text: `Unsupported ${params.displayName} command. Supported commands: status, report, doctor, visual, mode <conservative|normal>, reduction ..., stabilizer on|off|target.`,
+    };
   };
 }
