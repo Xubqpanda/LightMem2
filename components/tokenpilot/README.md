@@ -7,7 +7,7 @@ Within the current LightMem2 runtime path, TokenPilot primarily addresses this t
 
 - stable-prefix rewriting
 - observation reduction before large tool outputs poison later turns
-- lifecycle-aware canonical-history eviction for longer shared-session workflows
+- lifecycle-aware canonical-history eviction for longer shared-session workflows where the host supports it
 
 ## Where It Fits
 
@@ -89,16 +89,18 @@ components/tokenpilot/
 TokenPilot is being structured as a reusable LightMem2 component with host
 adapters, rather than as a permanently OpenClaw-only implementation.
 
-Current host integration index:
+Host integration index:
 
 - [adapters/README.md](./adapters/README.md)
 - [HOSTS.md](./HOSTS.md)
 
-Current implementation status:
+Supported host adapters:
 
-- `OpenClaw`: production adapter
-- `Codex CLI`: available through the standalone CLI + Codex hook adapter
-- `Claude Code`: gateway-first adapter with stable-prefix, reduction, and MCP recovery
+- `OpenClaw`: production adapter with the broadest public feature set
+- `Codex CLI`: adapter with stable-prefix, reduction, MCP recovery, report, doctor, and text visual
+- `Claude Code`: adapter with gateway routing, stable-prefix, reduction, MCP recovery, report, doctor, and text visual
+
+Use [HOSTS.md](./HOSTS.md) for the current capability matrix and host-specific boundaries.
 
 ## Runtime Commands
 
@@ -174,7 +176,7 @@ Recommended default behavior:
 
 - default install mode is `normal`
 - keep `stabilizer` enabled in all modes
-- enable `eviction` mainly for longer continuous-session workloads
+- enable `eviction` mainly for longer continuous-session workloads on hosts that expose it
 - on Codex, use `conservative` or `normal`; `aggressive` is intentionally unavailable
 - on Claude Code, use `conservative` or `normal`; `aggressive` is intentionally unavailable
 
@@ -205,6 +207,24 @@ Claude Code currently supports only:
 - `lightmem2 claude-code mode normal`
 
 ## Configuration
+
+This section mixes three host surfaces:
+
+- `OpenClaw`
+  - plugin-style config under `~/.openclaw/openclaw.json`
+- `Codex CLI`
+  - runtime config under `~/.codex/tokenpilot.json`
+- `Claude Code`
+  - runtime config under `~/.claude/tokenpilot.json`
+
+Not every key below applies to every host. For the current public adapters:
+
+- `OpenClaw`
+  - supports the broadest configuration surface, including eviction-related knobs
+- `Codex CLI`
+  - supports stabilizer + reduction related config only
+- `Claude Code`
+  - supports stabilizer + reduction related config only
 
 TokenPilot is configured through your OpenClaw plugin entry, typically in:
 
@@ -262,7 +282,7 @@ Minimal shape:
 }
 ```
 
-### Common Configuration
+### Shared Runtime Configuration
 
 | Key | Type | Default | Description |
 | :-- | :-- | :-- | :-- |
@@ -275,9 +295,7 @@ Minimal shape:
 | `hooks.beforeToolCall` | `boolean` | `true` after install | Enable before-tool-call safety/default injection. |
 | `hooks.dynamicContextTarget` | `string` | `developer` | Where dynamic context is injected. Supported values: `developer`, `user`. |
 | `modules.stabilizer` | `boolean` | `true` | Enable stable-prefix related runtime behavior. |
-| `modules.policy` | `boolean` | `true` | Enable policy/decision plumbing. |
 | `modules.reduction` | `boolean` | `true` | Enable observation reduction execution. |
-| `modules.eviction` | `boolean` | `false` | Enable lifecycle-aware eviction execution. |
 | `reduction.engine` | `string` | `layered` | Reduction engine. Current public value is `layered`. |
 | `reduction.triggerMinChars` | `number` | `2200` | Minimum chars before reduction candidate generation is triggered. |
 | `reduction.maxToolChars` | `number` | `1200` | Target maximum chars for trimmed tool payloads. |
@@ -286,19 +304,13 @@ Minimal shape:
 | `reduction.passes.htmlSlimming` | `boolean` | `true` | Compact noisy HTML content. |
 | `reduction.passes.execOutputTruncation` | `boolean` | `true` | Truncate long execution outputs. |
 | `reduction.passes.agentsStartupOptimization` | `boolean` | `true` | Apply agent startup optimization pass. |
-| `eviction.enabled` | `boolean` | `false` | Enable task-level canonical history eviction. |
-| `taskStateEstimator.enabled` | `boolean` | `false` | Enable the estimator used by lifecycle-aware eviction. |
-| `taskStateEstimator.baseUrl` | `string` | inherited from upstream when unset | OpenAI-compatible base URL for the estimator model. |
-| `taskStateEstimator.apiKey` | `string` | inherited from upstream when unset | API key for estimator requests. |
-| `taskStateEstimator.model` | `string` | inherited from upstream when unset | Model name used by the estimator. |
-| `taskStateEstimator.batchTurns` | `number` | `5` | Minimum turns before running one estimator update. |
-| `taskStateEstimator.evictionLookaheadTurns` | `number` | `3` | Lookahead horizon for completed-to-evictable decisions. |
-| `taskStateEstimator.lifecycleMode` | `string` | `coupled` | Supported values: `coupled`, `decoupled`. |
-| `taskStateEstimator.evidenceMode` | `string` | `three_state` | Supported values: `three_state`, `two_state`. |
-| `taskStateEstimator.inputMode` | `string` | `completed_summary_plus_active_turns` | Supported values: `sliding_window`, `completed_summary_plus_active_turns`. |
-| `ux.details` | `boolean` | `false` | Show module-level details in TokenPilot report surfaces. |
+| `ux.details` | `boolean` | `false` | Show module-level details in TokenPilot report surfaces where supported. |
 
-### Advanced Configuration
+### OpenClaw-Oriented Advanced Configuration
+
+The advanced keys below are primarily relevant to the current OpenClaw adapter.
+Codex CLI and Claude Code intentionally do not expose most of these controls in
+their public command surface today.
 
 | Key | Type | Default | Description |
 | :-- | :-- | :-- | :-- |
@@ -370,15 +382,24 @@ For the current public defaults:
 
 ## Runtime State
 
-The current component state directory prefers:
+State layout depends on the host:
 
-```text
-$HOME/.openclaw/tokenpilot-plugin-state/tokenpilot/
-```
+- `OpenClaw`
+  - `$HOME/.openclaw/tokenpilot-plugin-state/tokenpilot/`
+- `Codex CLI`
+  - `$HOME/.codex/tokenpilot-state/tokenpilot/`
+- `Claude Code`
+  - `$HOME/.claude/tokenpilot-state/tokenpilot/`
 
 Useful files include:
 
 - `event-trace.jsonl`
+- `ux-effects/latest.json`
+- `ux-effects/sessions/<session>.json`
+- `session-state/latest.json`
+
+OpenClaw-specific runtime state additionally includes:
+
 - `provider-traffic.jsonl`
 - `response-root-state.json`
 - `sessions/<logical>/turns.jsonl`
@@ -404,4 +425,6 @@ More package-level adapter notes live in:
 
 - [adapters/README.md](./adapters/README.md)
 - [adapters/openclaw/README.md](./adapters/openclaw/README.md)
+- [adapters/codex/README.md](./adapters/codex/README.md)
+- [adapters/claude-code/README.md](./adapters/claude-code/README.md)
 - [../../experiments/tokenpilot/README.md](../../experiments/tokenpilot/README.md)

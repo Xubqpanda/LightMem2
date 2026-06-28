@@ -9,11 +9,11 @@ For the component-level overview and shared command surface, see:
 - [`components/tokenpilot/adapters/README.md`](../README.md)
 - [`components/tokenpilot/HOSTS.md`](../../HOSTS.md)
 
-## Current Scope
+## Supports
 
-The current Codex adapter is intentionally narrower than the OpenClaw adapter.
+The Codex adapter is intentionally narrower than the OpenClaw adapter.
 
-Implemented today:
+Supported:
 
 - Codex provider installation into `config.toml`
 - TokenPilot runtime config in `~/.codex/tokenpilot.json`
@@ -26,7 +26,7 @@ Implemented today:
 - text-mode Codex session visual via `lightmem2 codex visual`
 - standalone `lightmem2 codex ...` command surface
 
-Not fully matched with OpenClaw yet:
+Current limitations:
 
 - visual inspector payload parity
 - lifecycle-aware eviction controls
@@ -99,9 +99,9 @@ tokenpilot-codex start
 tokenpilot-codex stop
 ```
 
-## Supported Commands
+## Commands
 
-Current Codex command surface:
+Codex command surface:
 
 ```bash
 lightmem2 codex status
@@ -121,7 +121,7 @@ lightmem2 codex reduction mode balanced
 lightmem2 codex reduction pass toolPayloadTrim off
 ```
 
-Supported reduction passes are currently limited to:
+Supported reduction passes:
 
 - `readStateCompaction`
 - `toolPayloadTrim`
@@ -129,7 +129,7 @@ Supported reduction passes are currently limited to:
 - `execOutputTruncation`
 - `agentsStartupOptimization`
 
-Unsupported today:
+Not supported:
 
 - `lightmem2 codex settings ...`
 - `lightmem2 codex eviction ...`

@@ -9,14 +9,15 @@ Anything that depends on one concrete host should stay under
 
 ## Current Status
 
-Current adapter inventory:
+Adapter inventory:
 
 - `openclaw/`
   - production adapter
 - `codex/`
-  - public-preview adapter for Codex CLI
+  - adapter for Codex CLI
+- `claude-code/`
+  - adapter for Claude Code
 - future adapters
-  - `claude-code`
   - other host-specific integrations
 
 ## What Belongs In An Adapter
@@ -117,3 +118,4 @@ spot.
 - [../HOSTS.md](../HOSTS.md)
 - [openclaw/README.md](./openclaw/README.md)
 - [codex/README.md](./codex/README.md)
+- [claude-code/README.md](./claude-code/README.md)

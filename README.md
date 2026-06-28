@@ -286,6 +286,10 @@ For the full Claude Code adapter notes, see:
 
 - [components/tokenpilot/adapters/claude-code/README.md](./components/tokenpilot/adapters/claude-code/README.md)
 
+For the current host capability matrix, see:
+
+- [components/tokenpilot/HOSTS.md](./components/tokenpilot/HOSTS.md)
+
 ### 3. Run the Built-In Smoke Test
 
 ```bash

@@ -1,48 +1,92 @@
 # TokenPilot Host Integrations
 
-TokenPilot is intended to become a reusable LightMem2 runtime component across
-multiple coding-agent hosts, not a permanently OpenClaw-only plugin.
+TokenPilot is now structured as a reusable LightMem2 component with multiple
+host adapters. Shared runtime logic lives under `packages/` and `products/`,
+while host-specific install surfaces and runtime wiring live under
+`adapters/<host>/`.
 
-The current public repository ships one production adapter:
+## Adapter Inventory
 
 | Host | Status | Integration Mode | Install Surface | Main Adapter Docs |
 | :-- | :-- | :-- | :-- | :-- |
-| `OpenClaw` | public | bundled runtime plugin | `pnpm component:install:tokenpilot:openclaw` or `npm --prefix components/tokenpilot/adapters/openclaw run install:release` | [adapters/openclaw/README.md](./adapters/openclaw/README.md) |
-| `Codex CLI` | public preview | external hook / adapter + local Responses proxy | `npm --prefix components/tokenpilot/adapters/codex run build` then `npm --prefix components/tokenpilot/adapters/codex run install:codex` | [adapters/codex/README.md](./adapters/codex/README.md) |
-| `Claude Code` | planned | external hook / adapter | todo | not implemented yet |
+| `OpenClaw` | production | bundled plugin + embedded runtime | `pnpm component:install:tokenpilot:openclaw` or `npm --prefix components/tokenpilot/adapters/openclaw run install:release` | [adapters/openclaw/README.md](./adapters/openclaw/README.md) |
+| `Codex CLI` | available | hooks + local Responses proxy + shared CLI | `npm --prefix components/tokenpilot/adapters/codex run build` then `npm --prefix components/tokenpilot/adapters/codex run install:codex` | [adapters/codex/README.md](./adapters/codex/README.md) |
+| `Claude Code` | available | gateway routing + observability hooks + shared CLI | `npm --prefix components/tokenpilot/adapters/claude-code run build` then `npm --prefix components/tokenpilot/adapters/claude-code run install:claude-code` | [adapters/claude-code/README.md](./adapters/claude-code/README.md) |
 
-## Current Boundary
+## Capability Matrix
+
+Legend:
+
+- `yes`: supported in the current public adapter
+- `partial`: available, but intentionally narrower than the OpenClaw path
+- `no`: not supported in the current public adapter
+
+| Capability | OpenClaw | Codex CLI | Claude Code |
+| :-- | :--: | :--: | :--: |
+| Stable-prefix rewriting | yes | yes | yes |
+| Before-call reduction | yes | yes | yes |
+| Real MCP-backed `memory_fault_recover` | yes | yes | yes |
+| Standalone `lightmem2 <host> ...` CLI | yes | yes | yes |
+| `status` / `doctor` / `report` | yes | yes | yes |
+| `visual` | yes | partial | partial |
+| `mode conservative` / `mode normal` | yes | yes | yes |
+| `mode aggressive` | yes | no | no |
+| Lifecycle eviction controls | yes | no | no |
+| In-host slash commands | yes | no | no |
+| Hook-based observability | partial | yes | yes |
+| Local proxy / gateway runtime | yes | yes | yes |
+| Session-state / ux-effects persistence | yes | yes | yes |
+
+## Host Notes
+
+### OpenClaw
+
+- richest public adapter today
+- supports the browser visual flow
+- currently the only adapter with lifecycle eviction controls and `mode aggressive`
+
+### Codex CLI
+
+- uses Codex config mutation, hook registration, and a local OpenAI-compatible Responses proxy
+- uses the standalone `lightmem2 codex ...` CLI surface instead of in-host slash commands
+- supports stable-prefix, reduction, report, doctor, text visual, and real MCP recovery
+- intentionally does not expose `settings`, `eviction`, or `mode aggressive`
+
+### Claude Code
+
+- uses local Anthropic-compatible gateway routing plus lightweight hooks for observability
+- uses the standalone `lightmem2 claude-code ...` CLI surface instead of in-host slash commands
+- supports stable-prefix, reduction, report, doctor, text visual, and real MCP recovery
+- intentionally does not expose `settings`, `eviction`, or `mode aggressive`
+
+## Boundary
 
 The intended split is:
 
 - `kernel`
   - shared contracts, events, and runtime-facing types
 - `runtime-core`
-  - host-agnostic reduction / recovery / archive primitives
+  - host-agnostic reduction, recovery, and archive primitives
 - `layers/*`
   - policy, history, and memory logic
 - host adapter
   - host config wiring
   - session / transcript bridge
-  - command surface
-  - install / doctor / runtime bootstrap
+  - command and install surface
+  - runtime bootstrap and doctor checks
 
 In directory form, that means:
 
 - `components/tokenpilot/packages/*`
   - reusable component logic
+- `components/tokenpilot/products/*`
+  - shared product surfaces such as the standalone CLI and MCP server
 - `components/tokenpilot/adapters/<host>`
   - host-specific integration layer
 
 General adapter development guidance lives in:
 
 - [adapters/README.md](./adapters/README.md)
-
-At the moment:
-
-- OpenClaw is the main production adapter
-- Codex CLI is available as a narrower public-preview adapter
-- some OpenClaw assumptions are still being pushed out of shared packages and into the adapter boundary
 
 ## Adapter Checklist
 
@@ -68,10 +112,10 @@ When adding a new host adapter, cover these surfaces explicitly:
 - control surface
   - commands, visualizations, status, and debugging entrypoints
 
-## Near-Term Plan
+## Ongoing Cleanup
 
-Before adding new hosts, the current cleanup sequence is:
+Current cleanup priorities are:
 
-1. finish moving remaining OpenClaw-specific path and transcript assumptions into the OpenClaw adapter
-2. keep `runtime-core` and `layers/*` on host-agnostic contracts
-3. add a second host adapter only after the boundary is stable enough to prove reuse
+1. keep pushing remaining OpenClaw-specific assumptions down into the OpenClaw adapter
+2. continue sharing state, observability, and CLI glue across Codex and Claude Code
+3. strengthen install / doctor / report / visual parity where the host surface allows it

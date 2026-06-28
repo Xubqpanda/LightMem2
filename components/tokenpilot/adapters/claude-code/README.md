@@ -1,43 +1,134 @@
 # TokenPilot Claude Code Adapter
 
-This adapter is the gateway-first TokenPilot integration for Claude Code.
+This package contains the current Claude Code adapter for the TokenPilot
+component. It is gateway-first: Claude Code requests are routed through a local
+Anthropic-compatible gateway, while hooks and a shared MCP server provide
+observability and real archive recovery.
 
-Current scope:
+For the shared component overview and host matrix, see:
 
-- install Claude Code routing through a local Anthropic-compatible gateway
-- install lightweight Claude Code hooks for session and tool observability
-- inspect local install state with doctor
-- register a real MCP-backed `memory_fault_recover` tool
-- decode and forward Anthropic Messages requests through shared gateway helpers
-- expose `lightmem2 claude-code ...` through the shared CLI surface
+- [`components/tokenpilot/README.md`](../../README.md)
+- [`components/tokenpilot/HOSTS.md`](../../HOSTS.md)
+- [`components/tokenpilot/adapters/README.md`](../README.md)
 
-Not implemented in this first scaffold:
+## Supports
 
-- lifecycle eviction
-- aggressive mode parity with OpenClaw
+Supported:
+
+- Claude Code install into local settings and MCP config
+- TokenPilot runtime config in `~/.claude/tokenpilot.json`
+- local gateway routing through an Anthropic-compatible adapter surface
+- real MCP-backed `memory_fault_recover`
+- lightweight observability hooks
+- stable-prefix rewriting
+- request-time reduction
+- lightweight session-state and ux-effects tracking
+- text-mode `lightmem2 claude-code visual`
+- standalone `lightmem2 claude-code ...` command surface
+
+Current limitations:
+
+- lifecycle eviction controls
+- `mode aggressive`
 - in-host slash commands
+- browser visual parity
 
-Install now writes three things:
+## Install
 
-- `~/.claude/settings.json` for gateway routing, tool-search env, and TokenPilot hook entries
-- `~/.claude/.claude.json` for the `tokenpilot_memory_fault_recover` MCP server
-- `~/.claude/tokenpilot.json` for TokenPilot runtime config
+Build the adapter:
 
-The installer also preserves existing files as:
+```bash
+cd /path/to/LightMem2
+npm --prefix components/tokenpilot/adapters/claude-code run build
+```
 
-- `settings.json.tokenpilot.bak`
-- `.claude.json.tokenpilot.bak`
+If your Claude Code files are not under the default `~/.claude`, set:
 
-It also writes a conservative MCP startup timeout and runs a post-install MCP
-startup probe. If the probe fails, Claude Code enters degraded mode: gateway
-routing and reduction still work, but the real `memory_fault_recover` tool may
-remain unavailable until MCP startup succeeds.
+```bash
+export CLAUDE_CODE_SETTINGS_PATH="/path/to/settings.json"
+export CLAUDE_CODE_MCP_CONFIG_PATH="/path/to/.claude.json"
+export TOKENPILOT_CLAUDE_CODE_CONFIG="/path/to/tokenpilot.json"
+```
 
-That MCP server backs the same recovery hints injected into trimmed payloads, so
-Claude Code can call the real `memory_fault_recover` tool instead of only
-seeing protocol text.
+Then install:
 
-Current doctor checks report whether:
+```bash
+cd /path/to/LightMem2
+npm --prefix components/tokenpilot/adapters/claude-code run install:claude-code
+```
+
+The installer will:
+
+- update `~/.claude/settings.json` for local gateway routing
+- enable the required tool-search environment flag
+- write TokenPilot runtime config to `~/.claude/tokenpilot.json`
+- register the shared `tokenpilot_memory_fault_recover` MCP server in `~/.claude/.claude.json`
+- preserve existing Claude files as `.tokenpilot.bak` backups before rewriting
+- write a conservative `startup_timeout_sec` for the recovery MCP server
+- run a post-install MCP startup probe and report degraded mode if recovery MCP is still unavailable
+
+## Verify
+
+First, run the adapter doctor:
+
+```bash
+cd /path/to/LightMem2
+npm --prefix components/tokenpilot/adapters/claude-code run doctor:claude-code
+```
+
+Then verify through the shared CLI:
+
+```bash
+lightmem2 claude-code status
+lightmem2 claude-code doctor
+lightmem2 claude-code mode normal
+lightmem2 claude-code reduction status
+lightmem2 claude-code stabilizer target developer
+```
+
+Claude Code currently supports `mode conservative` and `mode normal`.
+`mode aggressive` is not available on the current adapter.
+
+## Commands
+
+Claude Code command surface:
+
+```bash
+lightmem2 claude-code status
+lightmem2 claude-code report
+lightmem2 claude-code doctor
+lightmem2 claude-code visual
+lightmem2 claude-code mode conservative
+lightmem2 claude-code mode normal
+lightmem2 claude-code stabilizer on
+lightmem2 claude-code stabilizer off
+lightmem2 claude-code stabilizer target developer
+lightmem2 claude-code stabilizer target user
+lightmem2 claude-code reduction on
+lightmem2 claude-code reduction off
+lightmem2 claude-code reduction mode light
+lightmem2 claude-code reduction mode balanced
+lightmem2 claude-code reduction pass toolPayloadTrim off
+```
+
+Supported reduction passes:
+
+- `readStateCompaction`
+- `toolPayloadTrim`
+- `htmlSlimming`
+- `execOutputTruncation`
+- `agentsStartupOptimization`
+
+Not supported:
+
+- `lightmem2 claude-code settings ...`
+- `lightmem2 claude-code eviction ...`
+- `lightmem2 claude-code mode aggressive`
+- `lightmem2 claude-code stabilizer hook ...`
+
+## Doctor Coverage
+
+Doctor checks report whether:
 
 - Claude settings are installed
 - observability hooks are installed
@@ -51,3 +142,68 @@ Current doctor checks report whether:
 - MCP startup timeout still matches the expected install value
 - proxy health is reachable
 - session-state / ux-effects data already exist
+
+## Report And Visual
+
+`lightmem2 claude-code report` and `lightmem2 claude-code visual` intentionally serve different purposes:
+
+- `report`
+  - savings-oriented summary from `ux-effects`
+- `visual`
+  - text-mode session and recent-turn view from gateway + hooks observability state
+
+Current `visual` output includes:
+
+- latest resolved session id
+- latest response id
+- workspace hint when available
+- last observed hook and tool
+- recent turn request / response / assistant char counts
+- latest reduction savings summary
+
+This is a lightweight observability layer for Claude Code. It is not yet the
+same browser visual surface used by the OpenClaw adapter.
+
+## Runtime Files
+
+The current adapter writes state under:
+
+```text
+~/.claude/tokenpilot-state/tokenpilot/
+```
+
+Useful files:
+
+- `event-trace.jsonl`
+- `session-state/latest.json`
+- `session-state/sessions/<session>.json`
+- `session-state/bindings/<session>.jsonl`
+- `ux-effects/latest.json`
+- `ux-effects/sessions/<session>.json`
+
+## Debugging
+
+Useful checks:
+
+```bash
+cat ~/.claude/tokenpilot.json
+cat ~/.claude/settings.json
+cat ~/.claude/.claude.json
+npm --prefix components/tokenpilot/adapters/claude-code run doctor:claude-code
+```
+
+If install finishes in degraded MCP mode, gateway routing and reduction remain
+usable; only the real `memory_fault_recover` tool path is unavailable until MCP
+startup succeeds.
+
+## Package Scripts
+
+Primary package scripts:
+
+```bash
+npm --prefix components/tokenpilot/adapters/claude-code run build
+npm --prefix components/tokenpilot/adapters/claude-code run typecheck
+npm --prefix components/tokenpilot/adapters/claude-code test
+npm --prefix components/tokenpilot/adapters/claude-code run install:claude-code
+npm --prefix components/tokenpilot/adapters/claude-code run doctor:claude-code
+```
