@@ -28,6 +28,11 @@ The installer also preserves existing files as:
 - `settings.json.tokenpilot.bak`
 - `.claude.json.tokenpilot.bak`
 
+It also writes a conservative MCP startup timeout and runs a post-install MCP
+startup probe. If the probe fails, Claude Code enters degraded mode: gateway
+routing and reduction still work, but the real `memory_fault_recover` tool may
+remain unavailable until MCP startup succeeds.
+
 That MCP server backs the same recovery hints injected into trimmed payloads, so
 Claude Code can call the real `memory_fault_recover` tool instead of only
 seeing protocol text.
@@ -43,5 +48,6 @@ Current doctor checks report whether:
 - recovery MCP is installed
 - MCP `TOKENPILOT_STATE_DIR` matches the TokenPilot config state dir
 - MCP command / args still match the current TokenPilot install
+- MCP startup timeout still matches the expected install value
 - proxy health is reachable
 - session-state / ux-effects data already exist
