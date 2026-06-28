@@ -23,10 +23,37 @@ export type OpenClawDoctorReport = {
   checks: OpenClawDoctorCheck[];
 };
 
+function remediationLines(report: OpenClawDoctorReport): string[] {
+  const failing = new Set(report.checks.filter((check) => !check.ok).map((check) => check.key));
+  const fixes: string[] = [];
+
+  if (failing.has("config")) {
+    fixes.push("- run `npm run install:release` in `components/tokenpilot/adapters/openclaw` to recreate the OpenClaw TokenPilot install");
+    return fixes;
+  }
+  if (failing.has("extensionPath")) {
+    fixes.push("- rerun `npm run install:release` to reinstall the packaged OpenClaw extension under `~/.openclaw/extensions/tokenpilot`");
+  }
+  if (failing.has("pluginEntry") || failing.has("runtimeConfig") || failing.has("pluginAllowed") || failing.has("contextEngineSlot")) {
+    fixes.push("- rerun `npm run install:release` or repair the `plugins.entries.tokenpilot`, `plugins.allow`, and `plugins.slots.contextEngine` sections in `openclaw.json`");
+  }
+  if (failing.has("toolsProfile") || failing.has("memoryFaultRecover")) {
+    fixes.push("- update the `tools` section in `openclaw.json` so `tools.profile` is `coding` and `memory_fault_recover` is allowed");
+  }
+  if (failing.has("stateDir")) {
+    fixes.push("- create the TokenPilot state directory or point `plugins.entries.tokenpilot.config.stateDir` to an existing writable path");
+  }
+  if (failing.has("modelNamespace")) {
+    fixes.push("- refresh the registered runtime model aliases and restart the OpenClaw gateway so `tokenpilot/<model>` or `lightmem2/<model>` is available");
+  }
+  return fixes;
+}
+
 export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): OpenClawDoctorReport {
   const stateRoot = resolveOpenClawStateRoot();
   const configPath = resolveOpenClawConfigPath();
   const extensionPath = join(stateRoot, "extensions", "tokenpilot");
+  const expectedStateDir = join(stateRoot, "tokenpilot-plugin-state");
 
   if (!existsSync(configPath)) {
     return {
@@ -34,7 +61,7 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
       stateRoot,
       configPath,
       extensionPath,
-      stateDir: join(stateRoot, "tokenpilot-plugin-state"),
+      stateDir: expectedStateDir,
       checks: [
         {
           key: "config",
@@ -51,13 +78,21 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
   }
 
   const pluginCfg = pluginConfigRecord(config) ?? {};
-  const stateDir = normalizeText(getNestedValue(pluginCfg, ["stateDir"])) || join(stateRoot, "tokenpilot-plugin-state");
+  const stateDir = normalizeText(getNestedValue(pluginCfg, ["stateDir"])) || expectedStateDir;
+  const pluginAllow = Array.isArray(getNestedValue(config, ["plugins", "allow"])) ? getNestedValue(config, ["plugins", "allow"]) as unknown[] : [];
   const allow = Array.isArray(getNestedValue(config, ["tools", "allow"])) ? getNestedValue(config, ["tools", "allow"]) as unknown[] : [];
   const alsoAllow = Array.isArray(getNestedValue(config, ["tools", "alsoAllow"])) ? getNestedValue(config, ["tools", "alsoAllow"]) as unknown[] : [];
   const modelKeys = getNestedValue(config, ["agents", "defaults", "models"]);
-  const hasRuntimeModelNamespace = modelKeys && typeof modelKeys === "object"
-    ? Object.keys(modelKeys as Record<string, unknown>).some((key) => key.startsWith("tokenpilot/") || key.startsWith("lightmem2/"))
-    : false;
+  const registeredModelKeys = modelKeys && typeof modelKeys === "object"
+    ? Object.keys(modelKeys as Record<string, unknown>)
+    : [];
+  const hasRuntimeModelNamespace = registeredModelKeys.some((key) => key.startsWith("tokenpilot/") || key.startsWith("lightmem2/"));
+  const contextEngineSlot = normalizeText(getNestedValue(config, ["plugins", "slots", "contextEngine"]));
+  const memoryFaultRecoverLocation = allow.includes("memory_fault_recover")
+    ? "tools.allow"
+    : alsoAllow.includes("memory_fault_recover")
+      ? "tools.alsoAllow"
+      : "";
 
   const checks: OpenClawDoctorCheck[] = [
     {
@@ -71,14 +106,26 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
       detail: `runtime config enabled: ${getNestedValue(pluginCfg, ["enabled"]) === true}`,
     },
     {
+      key: "pluginAllowed",
+      ok: pluginAllow.includes("tokenpilot"),
+      detail: `plugins.allow includes tokenpilot: ${pluginAllow.includes("tokenpilot")}`,
+    },
+    {
+      key: "contextEngineSlot",
+      ok: contextEngineSlot === "layered-context",
+      detail: `plugins.slots.contextEngine: ${contextEngineSlot || "(unset)"}`,
+    },
+    {
       key: "toolsProfile",
       ok: normalizeText(getNestedValue(config, ["tools", "profile"])) === "coding",
       detail: `tools.profile: ${normalizeText(getNestedValue(config, ["tools", "profile"])) || "(unset)"}`,
     },
     {
       key: "memoryFaultRecover",
-      ok: allow.includes("memory_fault_recover") || alsoAllow.includes("memory_fault_recover"),
-      detail: "memory_fault_recover is allowed",
+      ok: Boolean(memoryFaultRecoverLocation),
+      detail: memoryFaultRecoverLocation
+        ? `memory_fault_recover is allowed via ${memoryFaultRecoverLocation}`
+        : "memory_fault_recover is not allowed",
     },
     {
       key: "extensionPath",
@@ -88,12 +135,14 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
     {
       key: "stateDir",
       ok: existsSync(stateDir),
-      detail: `plugin state dir exists: ${stateDir}`,
+      detail: `plugin state dir exists: ${existsSync(stateDir)} (${stateDir})`,
     },
     {
       key: "modelNamespace",
       ok: hasRuntimeModelNamespace,
-      detail: "tokenpilot/<model> or lightmem2/<model> namespace is registered in agents.defaults.models",
+      detail: hasRuntimeModelNamespace
+        ? `runtime model aliases include: ${registeredModelKeys.filter((key) => key.startsWith("tokenpilot/") || key.startsWith("lightmem2/")).join(", ")}`
+        : "tokenpilot/<model> or lightmem2/<model> namespace is not registered in agents.defaults.models",
     },
   ];
 
@@ -117,10 +166,11 @@ export function formatOpenClawDoctorReport(report: OpenClawDoctorReport): string
     ...report.checks.map((check) => `- ${check.ok ? "OK" : "WARN"} ${check.detail}`),
   ];
 
-  if (!report.ok) {
+  const fixes = remediationLines(report);
+  if (fixes.length > 0) {
     lines.push("");
-    lines.push("Suggested fix:");
-    lines.push("- run `npm run install:release` in `components/tokenpilot/adapters/openclaw`");
+    lines.push("Suggested fixes:");
+    lines.push(...fixes);
   }
 
   return lines.join("\n");
