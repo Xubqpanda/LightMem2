@@ -17,6 +17,10 @@ function normalizeSessionId(value: unknown): string | undefined {
   return text || undefined;
 }
 
+function childProcessExecArgv(): string[] {
+  return process.execArgv.filter((arg) => arg !== "--test");
+}
+
 function visualPidPath(stateDir: string): string {
   return join(stateDir, "visual-server.pid");
 }
@@ -94,7 +98,7 @@ async function ensureVisualServerForStateDir(stateDir: string): Promise<string> 
 
   await mkdir(stateDir, { recursive: true });
   const log = await open(visualLogPath(stateDir), "a");
-  const child = spawn(process.execPath, [__filename, "__openclaw_visual_daemon", stateDir], {
+  const child = spawn(process.execPath, [...childProcessExecArgv(), __filename, "__openclaw_visual_daemon", stateDir], {
     detached: true,
     stdio: ["ignore", log.fd, log.fd],
     env: process.env,
@@ -200,3 +204,15 @@ export function createOpenClawCliBridge(target: {
     maybeResolveLatestSessionId,
   };
 }
+
+async function runOpenClawVisualDaemonEntry(): Promise<void> {
+  if (process.argv[1] !== __filename) return;
+  if (await maybeRunOpenClawVisualDaemon(process.argv.slice(2))) {
+    return;
+  }
+}
+
+void runOpenClawVisualDaemonEntry().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+});

@@ -8,6 +8,7 @@ import {
 import { createClaudeCodeCliBridge } from "./hosts/claude-code.js";
 import { createCodexCliBridge } from "./hosts/codex.js";
 import { createOpenClawCliBridge } from "./hosts/openclaw.js";
+import { handleStandaloneVisualCommand } from "./hosts/visual.js";
 import { formatCliUsage } from "./usage.js";
 
 type HostTarget = {
@@ -105,6 +106,9 @@ export async function dispatchCli(argv: string[]): Promise<TokenPilotProductComm
   }
 
   const { target, commandArgs } = resolved;
+  if (!target && commandArgs.length === 1 && commandArgs[0] === "visual") {
+    return handleStandaloneVisualCommand();
+  }
   if (!target) {
     return {
       text: `No default host is selected.\n\n${formatCliUsage()}`,

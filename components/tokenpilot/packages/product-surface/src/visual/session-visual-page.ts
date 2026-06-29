@@ -81,6 +81,16 @@ export function renderVisualPageHtml(): string {
       line-height: 1.45;
       margin-bottom: 14px;
     }
+    .host-select {
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-strong);
+      color: var(--text);
+      font: inherit;
+    }
     .session-list {
       display: grid;
       gap: 8px;
@@ -345,6 +355,7 @@ export function renderVisualPageHtml(): string {
         <div class="brand">TokenPilot Visual</div>
       </div>
       <div class="sidebar-copy">Pick a session, then inspect one reduction or eviction event at a time.</div>
+      <select id="hostSelect" class="host-select" aria-label="Select host"></select>
       <div id="sessionList" class="session-list"></div>
     </aside>
     <main class="main">
@@ -384,7 +395,9 @@ export function renderVisualPageHtml(): string {
 
 export function renderVisualPageScript(): string {
   return `const state = {
+  hosts: [],
   sessions: [],
+  activeHost: new URL(window.location.href).searchParams.get("host") || "",
   activeSessionId: new URL(window.location.href).searchParams.get("session") || "",
   activeTab: "stability",
   indexes: { stability: 0, reduction: 0, eviction: 0 },
@@ -395,6 +408,7 @@ export function renderVisualPageScript(): string {
 const el = {
   app: document.getElementById("app"),
   collapseBtn: document.getElementById("collapseBtn"),
+  hostSelect: document.getElementById("hostSelect"),
   sessionList: document.getElementById("sessionList"),
   subtitle: document.getElementById("subtitle"),
   tabStability: document.getElementById("tabStability"),
@@ -506,8 +520,24 @@ async function fetchJson(path) {
   return response.json();
 }
 
+async function loadHosts() {
+  const payload = await fetchJson("/api/hosts");
+  state.hosts = Array.isArray(payload.hosts) ? payload.hosts : [];
+  if (!state.activeHost && state.hosts.length > 0) {
+    state.activeHost = state.hosts[0].hostId;
+  }
+  renderHostSelect();
+}
+
 async function loadSessions() {
-  const payload = await fetchJson("/api/sessions");
+  await loadHosts();
+  if (!state.activeHost) {
+    state.sessions = [];
+    renderSessionList();
+    renderEmpty("No visual hosts available yet.");
+    return;
+  }
+  const payload = await fetchJson("/api/sessions?host=" + encodeURIComponent(state.activeHost));
   state.sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
   if (!state.activeSessionId && state.sessions.length > 0) {
     state.activeSessionId = state.sessions[0].sessionId;
@@ -520,15 +550,27 @@ async function loadSessions() {
   }
 }
 
+function renderHostSelect() {
+  if (!el.hostSelect) return;
+  el.hostSelect.innerHTML = state.hosts.map((host) => {
+    const selected = host.hostId === state.activeHost ? " selected" : "";
+    return '<option value="' + escapeHtml(host.hostId) + '"' + selected + '>'
+      + escapeHtml(host.displayName + " (" + fmtInt(host.sessionCount) + ")")
+      + '</option>';
+  }).join("");
+}
+
 async function loadSession(sessionId) {
   if (!sessionId) return;
   state.activeSessionId = sessionId;
   const query = new URL(window.location.href);
+  query.searchParams.set("host", state.activeHost || "");
   query.searchParams.set("session", sessionId);
   history.replaceState(null, "", query.toString());
-  if (!state.sessionData.has(sessionId)) {
-    const payload = await fetchJson("/api/session?sessionId=" + encodeURIComponent(sessionId));
-    state.sessionData.set(sessionId, payload);
+  const sessionKey = (state.activeHost || "") + "::" + sessionId;
+  if (!state.sessionData.has(sessionKey)) {
+    const payload = await fetchJson("/api/session?host=" + encodeURIComponent(state.activeHost || "") + "&sessionId=" + encodeURIComponent(sessionId));
+    state.sessionData.set(sessionKey, payload);
   }
   renderSessionList();
   renderActiveView();
@@ -537,11 +579,14 @@ async function loadSession(sessionId) {
 function renderSessionList() {
   if (state.sessions.length === 0) {
     el.sessionList.innerHTML = '<div class="empty">No sessions</div>';
-    el.subtitle.textContent = "No visual snapshots available yet.";
+    el.subtitle.textContent = state.activeHost
+      ? "No visual snapshots available yet for " + state.activeHost + "."
+      : "No visual snapshots available yet.";
     return;
   }
+  const activeHost = state.hosts.find((host) => host.hostId === state.activeHost);
   el.subtitle.textContent = state.activeSessionId
-    ? "Session " + state.activeSessionId
+    ? (activeHost ? activeHost.displayName + " · " : "") + "Session " + state.activeSessionId
     : "Pick a session from the left.";
   el.sessionList.innerHTML = state.sessions.map((session, index) => {
     const active = session.sessionId === state.activeSessionId ? "active" : "";
@@ -558,7 +603,7 @@ function renderSessionList() {
 }
 
 function activeItems() {
-  const data = state.sessionData.get(state.activeSessionId);
+  const data = state.sessionData.get((state.activeHost || "") + "::" + state.activeSessionId);
   if (!data) return [];
   if (state.activeTab === "stability") return data.stability || [];
   if (state.activeTab === "reduction") return data.reduction || [];
@@ -576,6 +621,21 @@ function renderEmpty(message) {
   el.compareRoot.innerHTML = '<div class="empty">' + escapeHtml(message) + '</div>';
   el.passRoot.innerHTML = "";
 }
+
+el.hostSelect.addEventListener("change", async () => {
+  state.activeHost = el.hostSelect.value || "";
+  state.activeSessionId = "";
+  state.sessions = [];
+  const query = new URL(window.location.href);
+  if (state.activeHost) {
+    query.searchParams.set("host", state.activeHost);
+  } else {
+    query.searchParams.delete("host");
+  }
+  query.searchParams.delete("session");
+  history.replaceState(null, "", query.toString());
+  await loadSessions();
+});
 
 function renderStability(item) {
   el.panelTitle.textContent = "Stability";

@@ -59,6 +59,12 @@ Legend:
 - supports stable-prefix, reduction, report, doctor, text visual, and real MCP recovery
 - intentionally does not expose `settings`, `eviction`, or `mode aggressive`
 
+### Shared Visual Surface
+
+- `lightmem2 visual` now provides a standalone browser visual entrypoint
+- the shared visual can switch between `openclaw`, `codex`, and `claude-code` hosts
+- today, the browser visual is backed by snapshot data; OpenClaw has the richest dataset, while Codex and Claude Code still primarily expose text-mode `visual` through their host commands
+
 ## Boundary
 
 The intended split is:

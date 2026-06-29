@@ -1,7 +1,11 @@
 import { dispatchCli } from "./dispatch.js";
 import { maybeRunOpenClawVisualDaemon } from "./hosts/openclaw.js";
+import { maybeRunStandaloneVisualDaemon } from "./hosts/visual.js";
 
 async function main() {
+  if (await maybeRunStandaloneVisualDaemon(process.argv.slice(2))) {
+    return;
+  }
   if (await maybeRunOpenClawVisualDaemon(process.argv.slice(2))) {
     return;
   }

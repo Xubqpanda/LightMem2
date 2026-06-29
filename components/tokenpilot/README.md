@@ -100,6 +100,10 @@ Supported host adapters:
 - `Codex CLI`: adapter with stable-prefix, reduction, MCP recovery, report, doctor, and text visual
 - `Claude Code`: adapter with gateway routing, stable-prefix, reduction, MCP recovery, report, doctor, and text visual
 
+Shared product surfaces:
+
+- `lightmem2 visual`: standalone browser visual entrypoint with multi-host selection
+
 Use [HOSTS.md](./HOSTS.md) for the current capability matrix and host-specific boundaries.
 
 ## Runtime Commands
@@ -117,6 +121,7 @@ Use [HOSTS.md](./HOSTS.md) for the current capability matrix and host-specific b
 Standalone CLI equivalents:
 
 ```bash
+lightmem2 visual
 lightmem2 openclaw status
 lightmem2 openclaw report
 lightmem2 openclaw doctor
@@ -146,6 +151,12 @@ lightmem2 claude-code mode normal
 lightmem2 claude-code reduction status
 lightmem2 claude-code stabilizer target developer
 ```
+
+Notes:
+
+- `lightmem2 visual` opens the shared browser visual surface and can switch hosts from the sidebar
+- `lightmem2 openclaw visual` remains the OpenClaw-scoped browser visual entrypoint
+- `lightmem2 codex visual` and `lightmem2 claude-code visual` currently remain text-mode session visuals
 
 ### Stabilizer
 
