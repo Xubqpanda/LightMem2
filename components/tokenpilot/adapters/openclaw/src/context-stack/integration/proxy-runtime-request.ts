@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { runBeforeCallReductionOrchestrator } from "@tokenpilot/host-adapter";
-import { appendStabilityVisualSnapshot } from "@tokenpilot/product-surface";
+import {
+  findFirstMessageText,
+} from "@tokenpilot/product-surface";
 import { injectProceduralMemoryHints } from "./procedural-memory.js";
 import {
   createOpenClawPayloadCodec,
@@ -369,24 +371,6 @@ export async function prepareProxyRequest(args: {
       proceduralMemoryInjected: memoryInjection.injected,
       proceduralMemoryHitCount: memoryInjection.hitCount,
     });
-    await appendStabilityVisualSnapshot(cfg.stateDir, {
-      kind: "stability",
-      at: new Date().toISOString(),
-      sessionId: resolvedSessionId,
-      model,
-      upstreamModel,
-      promptCacheKeyBefore: originalPromptCacheKey,
-      promptCacheKeyAfter: stableRewrite.promptCacheKey,
-      dynamicContextTarget,
-      userContentRewrites: Number(stableRewrite.userContentRewrites ?? 0),
-      senderMetadataBlocksBefore: Number(stableRewrite.senderMetadataBlocksBefore ?? 0),
-      senderMetadataBlocksAfter: Number(stableRewrite.senderMetadataBlocksAfter ?? 0),
-      developerBefore: String(rootPromptCandidate?.text ?? ""),
-      developerCanonical: developerCanonicalText,
-      developerForwarded: developerForwardedText,
-      dynamicContextText: String(rootPromptRewrite?.dynamicContextText ?? ""),
-      firstTurnCandidate,
-    });
   }
   const beforeReductionInputCount = Array.isArray(payload?.input) ? payload.input.length : 0;
   const beforeReductionInputChars = helpers.estimatePayloadInputChars(payload?.input);
@@ -464,6 +448,8 @@ export async function prepareProxyRequest(args: {
     devAndUser,
     firstTurnCandidate,
     originalPromptCacheKey,
+    dynamicContextTarget,
+    shouldRecordStability: !proxyPureForward && Boolean(cfg.stateDir) && Boolean(devAndUser),
   });
   payload.prompt_cache_retention = "24h";
   return {

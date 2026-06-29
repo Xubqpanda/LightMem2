@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { mkdir, appendFile } from "node:fs/promises";
-import { appendReductionVisualSnapshot } from "@tokenpilot/product-surface";
+import {
+  buildVisualRequestId,
+  findFirstMessageText,
+  recordBeforeCallVisualState,
+} from "@tokenpilot/product-surface";
 import { pluginStateSubdir } from "@tokenpilot/runtime-core";
 import { summarizeResponseFunctionCalls } from "./proxy-runtime-shared.js";
-
-function buildRequestId(parts: unknown[]): string {
-  return createHash("sha1").update(JSON.stringify(parts)).digest("hex").slice(0, 16);
-}
 
 export async function recordProxyInbound(params: {
   cfg: any;
@@ -28,6 +27,8 @@ export async function recordProxyInbound(params: {
   devAndUser: any;
   firstTurnCandidate: boolean;
   originalPromptCacheKey: string;
+  dynamicContextTarget: "user" | "developer";
+  shouldRecordStability: boolean;
 }): Promise<void> {
   const {
     cfg,
@@ -47,20 +48,62 @@ export async function recordProxyInbound(params: {
     devAndUser,
     firstTurnCandidate,
     originalPromptCacheKey,
+    dynamicContextTarget,
+    shouldRecordStability,
   } = params;
   const activePayload = requestEnvelope?.rawPayload && typeof requestEnvelope.rawPayload === "object"
     ? requestEnvelope.rawPayload
     : payload;
   const requestAt = new Date().toISOString();
-  const requestId = buildRequestId([
-    requestAt,
+  const proxyLogPath = pluginStateSubdir(cfg.stateDir, "proxy-requests.jsonl");
+  const visualResult = await recordBeforeCallVisualState({
+    stateDir: cfg.stateDir,
+    at: requestAt,
+    sessionId: resolvedSessionId,
     model,
     upstreamModel,
-    stableRewrite.promptCacheKey,
-    requestEnvelope?.metadata?.previousResponseId ?? activePayload?.previous_response_id ?? "",
-    Array.isArray(requestEnvelope?.messages) ? requestEnvelope.messages.length : Array.isArray(activePayload?.input) ? activePayload.input.length : -1,
-  ]);
-  const proxyLogPath = pluginStateSubdir(cfg.stateDir, "proxy-requests.jsonl");
+    preparedEnvelope: requestEnvelope,
+    stability: shouldRecordStability
+      ? {
+        originalEnvelope: {
+          ...requestEnvelope,
+          messages: Array.isArray(requestEnvelope?.messages) && devAndUser
+            ? requestEnvelope.messages.map((message: any, index: number) => {
+                if (index === devAndUser.developerIndex && rootPromptRewrite) {
+                  return {
+                    ...message,
+                    content: String(rootPromptRewrite.rawPromptText ?? rootPromptRewrite.canonicalPromptText ?? ""),
+                  };
+                }
+                if (index === devAndUser.userIndex && dynamicContextTarget === "user" && rootPromptRewrite?.dynamicContextText) {
+                  return {
+                    ...message,
+                    content: String(devAndUser.userItem?.content ?? message?.content ?? ""),
+                  };
+                }
+                return message;
+              })
+            : requestEnvelope?.messages ?? [],
+          metadata: {
+            ...(requestEnvelope?.metadata ?? {}),
+            promptCacheKey: originalPromptCacheKey,
+          },
+        },
+        dynamicContextTarget,
+        getDeveloperText(envelope) {
+          return findFirstMessageText(envelope, (message: any) => message?.role === "developer");
+        },
+        developerCanonical: developerCanonicalText,
+        developerForwarded: developerForwardedText,
+        dynamicContextText: String(rootPromptRewrite?.dynamicContextText ?? ""),
+        senderMetadataBlocksBefore: Number(stableRewrite.senderMetadataBlocksBefore ?? 0),
+        senderMetadataBlocksAfter: Number(stableRewrite.senderMetadataBlocksAfter ?? 0),
+        firstTurnCandidate,
+      }
+      : undefined,
+    reductionSegments: Array.isArray(reductionApplied.visualSegments) ? reductionApplied.visualSegments : [],
+  });
+  const requestId = visualResult.reductionRequestId ?? "";
   const logRecord = {
     at: requestAt,
     requestId,
@@ -101,27 +144,6 @@ export async function recordProxyInbound(params: {
       reductionChangedBlocks: reductionApplied.changedBlocks,
     },
   });
-  for (const segment of Array.isArray(reductionApplied.visualSegments) ? reductionApplied.visualSegments : []) {
-    await appendReductionVisualSnapshot(cfg.stateDir, {
-      kind: "reduction",
-      at: requestAt,
-      sessionId: resolvedSessionId,
-      requestId,
-      model,
-      upstreamModel,
-      segmentId: segment.segmentId,
-      itemIndex: segment.itemIndex,
-      field: segment.field,
-      blockIndex: segment.blockIndex,
-      blockKey: segment.blockKey,
-      toolName: segment.toolName,
-      dataPath: segment.dataPath,
-      savedChars: Number(segment.savedChars ?? 0),
-      beforeText: String(segment.beforeText ?? ""),
-      afterText: String(segment.afterText ?? ""),
-      report: Array.isArray(segment.report) ? segment.report : [],
-    });
-  }
   if (!cfg.debugTapProviderTraffic) return;
 
   const debugRecord = {
@@ -189,7 +211,7 @@ export async function recordProxyResponse(params: {
   }
   const responseView = responseEnvelope ?? null;
   const responseAt = new Date().toISOString();
-  const responseRequestId = buildRequestId([
+  const responseRequestId = buildVisualRequestId([
     responseAt,
     model,
     upstreamModel,
