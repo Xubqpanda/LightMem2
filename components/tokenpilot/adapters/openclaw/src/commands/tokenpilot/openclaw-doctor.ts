@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getNestedValue } from "@tokenpilot/product-surface";
-import { resolveOpenClawConfigPath, resolveOpenClawStateRoot } from "../../context-stack/integration/openclaw-paths.js";
+import {
+  resolveDefaultOpenClawTokenPilotStateDir,
+  resolveOpenClawCanonicalTokenPilotStateDir,
+  resolveOpenClawConfigPath,
+  resolveOpenClawLegacyTokenPilotStateDir,
+  resolveOpenClawStateRoot,
+} from "../../context-stack/integration/openclaw-paths.js";
 import { pluginConfigRecord } from "./host-config-adapter.js";
 
 function normalizeText(value: unknown): string {
@@ -53,7 +59,10 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
   const stateRoot = resolveOpenClawStateRoot();
   const configPath = resolveOpenClawConfigPath();
   const extensionPath = join(stateRoot, "extensions", "tokenpilot");
-  const expectedStateDir = join(stateRoot, "tokenpilot-plugin-state");
+  const canonicalStateDir = resolveOpenClawCanonicalTokenPilotStateDir();
+  const legacyStateDir = resolveOpenClawLegacyTokenPilotStateDir();
+  const expectedStateDir = resolveDefaultOpenClawTokenPilotStateDir();
+  const recognizedStateDirs = new Set([canonicalStateDir, legacyStateDir]);
 
   if (!existsSync(configPath)) {
     return {
@@ -136,6 +145,11 @@ export function inspectOpenClawDoctor(currentConfig?: Record<string, unknown>): 
       key: "stateDir",
       ok: existsSync(stateDir),
       detail: `plugin state dir exists: ${existsSync(stateDir)} (${stateDir})`,
+    },
+    {
+      key: "stateDirCanonical",
+      ok: recognizedStateDirs.has(stateDir),
+      detail: `canonical state dir: ${canonicalStateDir} (legacy exists: ${existsSync(legacyStateDir)})`,
     },
     {
       key: "modelNamespace",

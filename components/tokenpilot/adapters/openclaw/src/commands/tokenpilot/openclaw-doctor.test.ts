@@ -21,7 +21,7 @@ function baseConfig(stateRoot: string): Record<string, unknown> {
           enabled: true,
           config: {
             enabled: true,
-            stateDir: join(stateRoot, "tokenpilot-plugin-state"),
+            stateDir: join(stateRoot, "tokenpilot-state"),
           },
         },
       },
@@ -44,7 +44,7 @@ test("inspectOpenClawDoctor passes when release install invariants are present",
   const root = makeTempRoot();
   const configPath = join(root, ".openclaw", "openclaw.json");
   const extensionPath = join(root, ".openclaw", "extensions", "tokenpilot");
-  const stateDir = join(root, ".openclaw", "tokenpilot-plugin-state");
+  const stateDir = join(root, ".openclaw", "tokenpilot-state");
   mkdirSync(join(root, ".openclaw"), { recursive: true });
   mkdirSync(extensionPath, { recursive: true });
   mkdirSync(stateDir, { recursive: true });
@@ -59,6 +59,57 @@ test("inspectOpenClawDoctor passes when release install invariants are present",
     assert.equal(report.checks.every((check) => check.ok), true);
     assert.match(formatOpenClawDoctorReport(report), /plugins\.slots\.contextEngine: layered-context/);
     assert.doesNotMatch(formatOpenClawDoctorReport(report), /Suggested fixes:/);
+  } finally {
+    delete process.env.OPENCLAW_STATE_DIR;
+    delete process.env.OPENCLAW_CONFIG_PATH;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inspectOpenClawDoctor accepts a legacy state dir when the canonical dir has not been created yet", async () => {
+  const root = makeTempRoot();
+  const configPath = join(root, ".openclaw", "openclaw.json");
+  const extensionPath = join(root, ".openclaw", "extensions", "tokenpilot");
+  const legacyStateDir = join(root, ".openclaw", "tokenpilot-plugin-state");
+  mkdirSync(join(root, ".openclaw"), { recursive: true });
+  mkdirSync(extensionPath, { recursive: true });
+  mkdirSync(legacyStateDir, { recursive: true });
+  writeFileSync(configPath, "{}\n", "utf8");
+
+  process.env.OPENCLAW_STATE_DIR = join(root, ".openclaw");
+  process.env.OPENCLAW_CONFIG_PATH = configPath;
+
+  try {
+    const report = inspectOpenClawDoctor({
+      plugins: {
+        allow: ["tokenpilot"],
+        slots: {
+          contextEngine: "layered-context",
+        },
+        entries: {
+          tokenpilot: {
+            enabled: true,
+            config: {
+              enabled: true,
+              stateDir: legacyStateDir,
+            },
+          },
+        },
+      },
+      tools: {
+        profile: "coding",
+        alsoAllow: ["memory_fault_recover"],
+      },
+      agents: {
+        defaults: {
+          models: {
+            "lightmem2/gpt-5.4-mini": {},
+          },
+        },
+      },
+    });
+    assert.equal(report.ok, true);
+    assert.equal(report.checks.find((check) => check.key === "stateDirCanonical")?.ok, true);
   } finally {
     delete process.env.OPENCLAW_STATE_DIR;
     delete process.env.OPENCLAW_CONFIG_PATH;

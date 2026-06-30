@@ -93,6 +93,12 @@ tokenpilot/gpt-5.4-mini
 The current component state directory prefers:
 
 ```text
+$HOME/.openclaw/tokenpilot-state/tokenpilot/
+```
+
+Legacy installs may still be under:
+
+```text
 $HOME/.openclaw/tokenpilot-plugin-state/tokenpilot/
 ```
 
@@ -111,7 +117,7 @@ When a run looks invalid, start with:
 OPENCLAW_CONFIG_PATH=$HOME/.openclaw/openclaw.json openclaw config validate
 tail -n 100 $HOME/.openclaw/logs/gateway.log
 rg 'stable_prefix_rewrite|proxy_before_call_rewrite|proxy_after_call_rewrite|tool_result_persist_applied' \
-  $HOME/.openclaw/tokenpilot-plugin-state/task-state/trace.jsonl
+  $HOME/.openclaw/tokenpilot-state/task-state/trace.jsonl
 ```
 
 Lightweight integration self-check:
