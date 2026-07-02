@@ -73,12 +73,22 @@ type DiffFileSummary = {
   preview: string[];
 };
 
+type CodeLineEntry = {
+  lineNumber: number;
+  text: string;
+};
+
 const SEARCH_LINE_RE = /^(.+?):(\d+)(?::|-)(.*)$/;
 const LOG_IMPORTANCE_RE = /\b(error|warn(?:ing)?|failed|exception|traceback|panic|fatal|denied|timeout)\b/i;
 const STACK_TRACE_RE = /^\s*(at\s+\S+\s+\(|Traceback \(most recent call last\):|Caused by:|File ".*", line \d+)/;
 const DIFF_FILE_RE = /^\+\+\+ b\/(.+)$/;
 const DIFF_HUNK_RE = /^@@/;
 const DIFF_CHANGE_RE = /^[+-][^+-]/;
+const CODE_IMPORT_RE = /^\s*(import\s.+|from\s+\S+\s+import\s+.+|const\s+\w+\s*=\s*require\(.+\)|using\s+\S+.*)$/;
+const CODE_SYMBOL_RE =
+  /^\s*(export\s+)?(async\s+)?(function|class|def|interface|type|const\s+\w+\s*=\s*\(|let\s+\w+\s*=\s*\(|var\s+\w+\s*=\s*\()|^\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*\{/;
+const CODE_ALERT_RE = /\b(throw\s+new|throw\s+|catch\s*\(|Error\b|Exception\b|TODO\b|FIXME\b|panic!\b|console\.(error|warn)\b)\b/;
+const NUMBERED_CODE_LINE_RE = /^\s*\d+\s*(?:[|:]\s*|\t|\s{2,})(.+)$/;
 
 function clipText(value: string, maxChars: number): string {
   return value.length <= maxChars ? value : `${value.slice(0, maxChars)}...`;
@@ -388,30 +398,137 @@ function summarizeLogOutput(text: string, cfg: PayloadBlockConfig): string {
 function summarizeCodeLike(text: string, cfg: PayloadBlockConfig): string {
   if (text.length <= cfg.maxChars) return text;
   const lines = text.split("\n");
-  const signatures: string[] = [];
-  const signatureRe =
-    /^\s*(export\s+)?(async\s+)?(function|class|def|interface|type|const\s+\w+\s*=\s*\(|let\s+\w+\s*=\s*\(|var\s+\w+\s*=\s*\()|^\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*\{/;
+  const imports: CodeLineEntry[] = [];
+  const symbols: CodeLineEntry[] = [];
+  const alerts: CodeLineEntry[] = [];
+  const windows: Array<{ start: number; end: number; label: string }> = [];
 
-  for (const line of lines) {
+  const addWindow = (start: number, end: number, label: string): void => {
+    const boundedStart = Math.max(0, start);
+    const boundedEnd = Math.min(lines.length - 1, end);
+    if (boundedStart > boundedEnd) return;
+    windows.push({ start: boundedStart, end: boundedEnd, label });
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (!trimmed) continue;
-    if (signatureRe.test(trimmed)) {
-      signatures.push(clipText(trimmed, cfg.maxPreviewChars));
+    if (CODE_IMPORT_RE.test(trimmed) && imports.length < Math.max(4, cfg.maxItems)) {
+      imports.push({ lineNumber: index + 1, text: trimmed });
+      continue;
     }
-    if (signatures.length >= cfg.maxItems * 2) break;
+    if (CODE_SYMBOL_RE.test(trimmed) && symbols.length < Math.max(4, cfg.maxItems * 2)) {
+      symbols.push({ lineNumber: index + 1, text: trimmed });
+      addWindow(index, index + 4, "symbol");
+      continue;
+    }
+    if (CODE_ALERT_RE.test(trimmed) && alerts.length < Math.max(3, cfg.maxItems)) {
+      alerts.push({ lineNumber: index + 1, text: trimmed });
+      addWindow(index - 1, index + 2, "alert");
+    }
   }
 
-  if (signatures.length === 0) {
+  if (symbols.length === 0 && imports.length === 0 && alerts.length === 0) {
     return summarizeLineBlock(text, "code", cfg);
   }
 
-  const header = lines.slice(0, Math.min(cfg.keepHeadLines, 4));
+  addWindow(0, Math.min(lines.length - 1, Math.max(5, cfg.keepHeadLines) - 1), "head");
+  addWindow(
+    Math.max(0, lines.length - Math.max(5, cfg.keepTailLines)),
+    lines.length - 1,
+    "tail",
+  );
+
+  windows.sort((a, b) => a.start - b.start || a.end - b.end);
+  const mergedWindows: Array<{ start: number; end: number }> = [];
+  for (const window of windows) {
+    const last = mergedWindows[mergedWindows.length - 1];
+    if (!last || window.start > last.end + 1) {
+      mergedWindows.push({ start: window.start, end: window.end });
+      continue;
+    }
+    last.end = Math.max(last.end, window.end);
+  }
+
+  const selectedLines: string[] = [];
+  let previousEnd = -1;
+  for (const window of mergedWindows.slice(0, Math.max(3, cfg.maxItems + 1))) {
+    if (window.start > previousEnd + 1) {
+      selectedLines.push(`...[code block omitted lines=${window.start - previousEnd - 1}]`);
+    }
+    for (let index = window.start; index <= window.end; index += 1) {
+      selectedLines.push(`${index + 1}: ${clipText(lines[index], cfg.maxPreviewChars * 2)}`);
+    }
+    previousEnd = window.end;
+  }
+  if (previousEnd < lines.length - 1) {
+    selectedLines.push(`...[code tail omitted lines=${lines.length - previousEnd - 1}]`);
+  }
+
   const summary = [
-    ...header,
-    `...[code reduced signatures=${signatures.length} total_lines=${lines.length}]`,
-    ...signatures,
+    `[code reduced lines=${lines.length} imports=${imports.length} symbols=${symbols.length} alerts=${alerts.length}]`,
+    ...(imports.length > 0
+      ? [
+          "imports:",
+          ...imports.slice(0, Math.max(4, cfg.maxItems)).map((entry) => `  ${entry.lineNumber}: ${clipText(entry.text, cfg.maxPreviewChars)}`),
+        ]
+      : []),
+    ...(symbols.length > 0
+      ? [
+          "symbols:",
+          ...symbols.slice(0, Math.max(4, cfg.maxItems)).map((entry) => `  ${entry.lineNumber}: ${clipText(entry.text, cfg.maxPreviewChars)}`),
+        ]
+      : []),
+    ...(alerts.length > 0
+      ? [
+          "alerts:",
+          ...alerts.slice(0, Math.max(3, cfg.maxItems)).map((entry) => `  ${entry.lineNumber}: ${clipText(entry.text, cfg.maxPreviewChars)}`),
+        ]
+      : []),
+    "selected blocks:",
+    ...selectedLines,
   ];
   return summary.join("\n").trim();
+}
+
+function looksLikeControlledCodeRead(text: string, hint: ToolPayloadHint | undefined): boolean {
+  const lines = text.split("\n");
+  if (lines.length < 4 || lines.length > 160) return false;
+  if (text.length > 9_000) return false;
+
+  const toolName = hint?.toolName?.trim().toLowerCase();
+  const path = hint?.path?.trim().toLowerCase();
+  const pathLooksCode = path != null && /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|rb|php|cs|cpp|c|h|hpp|scala)$/i.test(path);
+
+  let numbered = 0;
+  let codeish = 0;
+  for (const line of lines) {
+    const numberedMatch = line.match(NUMBERED_CODE_LINE_RE);
+    const content = numberedMatch ? numberedMatch[1] : line;
+    if (numberedMatch) numbered += 1;
+    if (CODE_IMPORT_RE.test(content) || CODE_SYMBOL_RE.test(content) || /[{}();]/.test(content)) {
+      codeish += 1;
+    }
+  }
+
+  if (
+    numbered >= Math.max(4, Math.floor(lines.length * 0.45))
+    && codeish >= Math.max(4, Math.floor(lines.length * 0.3))
+    && (pathLooksCode
+      || toolName === "bash"
+      || toolName === "shell"
+      || toolName === "powershell"
+      || toolName === "exec"
+      || toolName === "read"
+      || toolName === "file_read")
+  ) {
+    return true;
+  }
+
+  return codeish >= Math.max(6, Math.floor(lines.length * 0.5))
+    && pathLooksCode
+    && (toolName === "bash" || toolName === "shell" || toolName === "powershell" || toolName === "exec");
 }
 
 function summarizeDiffOutput(text: string, cfg: PayloadBlockConfig): string {
@@ -539,6 +656,17 @@ function reduceByClassification(
       nextText = summarizeBlobText(text, blockCfg);
       break;
     case "code_like":
+      if (looksLikeControlledCodeRead(text, hint)) {
+        const relaxedChars = Math.max(blockCfg.maxChars * 6, 9_000);
+        if (text.length <= relaxedChars) {
+          return {
+            text,
+            changed: false,
+            route: classification.contentType,
+            reason: `${classification.reason}:controlled_code_read`,
+          };
+        }
+      }
       nextText = summarizeCodeLike(text, blockCfg);
       break;
     case "plain_text":

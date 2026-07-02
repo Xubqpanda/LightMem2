@@ -249,9 +249,36 @@ const buildIndex = (
   const result = reduceToolPayloadText(payload, "stdout", defaultCfg);
   assert.equal(result.route, "code_like");
   assert.equal(result.changed, true);
-  assert.match(result.text, /code reduced signatures=/);
+  assert.match(result.text, /\[code reduced lines=/);
+  assert.match(result.text, /imports:/);
+  assert.match(result.text, /symbols:/);
+  assert.match(result.text, /selected blocks:/);
   assert.match(result.text, /export class SearchService/);
   assert.match(result.text, /export async function runSearch/);
+});
+
+test("reduceToolPayloadText keeps controlled small-window code reads intact", () => {
+  const payload = [
+    "  1 | import fs from \"node:fs\";",
+    "  2 | import path from \"node:path\";",
+    "  3 | ",
+    "  4 | export function loadConfig(file: string) {",
+    "  5 |   const full = path.resolve(file);",
+    "  6 |   return fs.readFileSync(full, \"utf8\");",
+    "  7 | }",
+    "  8 | ",
+    "  9 | export function saveConfig(file: string, text: string) {",
+    " 10 |   fs.writeFileSync(path.resolve(file), text, \"utf8\");",
+    " 11 | }",
+  ].join("\n").repeat(4);
+
+  const result = reduceToolPayloadText(payload, "stdout", defaultCfg, {
+    toolName: "bash",
+    path: "/repo/src/config.ts",
+    payloadKind: "stdout",
+  });
+  assert.equal(result.route, "code_like");
+  assert.equal(result.changed, false);
 });
 
 test("reduceToolPayloadText compresses stale read payloads more aggressively", () => {
