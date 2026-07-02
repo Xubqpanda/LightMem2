@@ -157,6 +157,7 @@ export function createOpenClawCliBridge(target: {
   bridge: TokenPilotProductSurfaceHostBridge;
   configAdapter: TokenPilotProductSurfaceConfigAdapter;
   maybeResolveLatestSessionId(): Promise<string | undefined>;
+  resolveSessionId(sessionId?: string): Promise<string | undefined>;
 } {
   const bridge: TokenPilotProductSurfaceHostBridge = {
     loadConfig,
@@ -202,6 +203,9 @@ export function createOpenClawCliBridge(target: {
     bridge,
     configAdapter: openClawProductSurfaceConfigAdapter,
     maybeResolveLatestSessionId,
+    async resolveSessionId(sessionId?: string): Promise<string | undefined> {
+      return normalizeSessionId(sessionId);
+    },
   };
 }
 

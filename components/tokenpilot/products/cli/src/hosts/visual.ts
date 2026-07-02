@@ -8,16 +8,7 @@ import {
   readVisualSessionList,
   type VisualHostSource,
 } from "@tokenpilot/product-surface";
-import {
-  defaultTokenPilotClaudeCodeConfigPath,
-  loadTokenPilotClaudeCodeConfig,
-} from "../../../../adapters/claude-code/src/config.js";
-import {
-  defaultTokenPilotConfigPath,
-  loadTokenPilotCodexConfig,
-} from "../../../../adapters/codex/src/config.js";
-import { resolveOpenClawConfigPath } from "../../../../adapters/openclaw/src/context-stack/integration/openclaw-paths.js";
-import { resolveStateDir as resolveOpenClawStateDir } from "../../../../adapters/openclaw/src/commands/tokenpilot/host-config-adapter.js";
+import { resolveCliVisualHosts } from "./registry.js";
 
 type MultiHostVisualMeta = {
   url?: string;
@@ -73,56 +64,11 @@ function hostSignature(hosts: VisualHostSource[]): string {
   return JSON.stringify(hosts.map((host) => ({ hostId: host.hostId, stateDir: host.stateDir })));
 }
 
-async function readOpenClawConfig(): Promise<Record<string, unknown>> {
-  const configPath = resolveOpenClawConfigPath();
-  try {
-    const raw = await readFile(configPath, "utf8");
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-async function resolveVisualHosts(): Promise<VisualHostSource[]> {
-  const openclawConfig = await readOpenClawConfig();
-  const codexConfig = await loadTokenPilotCodexConfig(defaultTokenPilotConfigPath());
-  const claudeConfig = await loadTokenPilotClaudeCodeConfig(defaultTokenPilotClaudeCodeConfigPath());
-
-  const candidates: VisualHostSource[] = [
-    {
-      hostId: "openclaw",
-      displayName: "OpenClaw",
-      stateDir: resolveOpenClawStateDir(openclawConfig) ?? "",
-    },
-    {
-      hostId: "codex",
-      displayName: "Codex",
-      stateDir: codexConfig.stateDir,
-    },
-    {
-      hostId: "claude-code",
-      displayName: "Claude Code",
-      stateDir: claudeConfig.stateDir,
-    },
-  ];
-
-  const hosts: VisualHostSource[] = [];
-  for (const candidate of candidates) {
-    const stateDir = String(candidate.stateDir ?? "").trim();
-    if (!stateDir) continue;
-    hosts.push({
-      ...candidate,
-      stateDir,
-    });
-  }
-  return hosts;
-}
-
 export async function ensureStandaloneVisualServer(): Promise<{
   url: string;
   hosts: VisualHostSource[];
 }> {
-  const hosts = await resolveVisualHosts();
+  const hosts = await resolveCliVisualHosts();
   const nextSignature = hostSignature(hosts);
   const metaFile = visualMetaPath();
   const pidFile = visualPidPath();
@@ -189,7 +135,7 @@ export async function ensureStandaloneVisualServer(): Promise<{
 
 export async function maybeRunStandaloneVisualDaemon(argv: string[]): Promise<boolean> {
   if (argv[0] !== "__lightmem2_visual_daemon") return false;
-  const hosts = await resolveVisualHosts();
+  const hosts = await resolveCliVisualHosts();
   const handle = await ensureMultiHostVisualServer(hosts);
   await mkdir(dirname(visualMetaPath()), { recursive: true });
   await writeFile(

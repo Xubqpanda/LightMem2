@@ -1,3 +1,5 @@
+import { CLI_HOSTS } from "./hosts/registry.js";
+
 export function formatCliUsage(): string {
   return [
     "Usage:",
@@ -6,9 +8,7 @@ export function formatCliUsage(): string {
     "  lightmem2 <host> session <session-id> <command>",
     "",
     "Hosts:",
-    "  openclaw",
-    "  codex",
-    "  claude-code",
+    ...CLI_HOSTS.map((host) => `  ${host.hostId}`),
     "",
     "Top-level commands:",
     "  status",

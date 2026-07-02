@@ -1,13 +1,10 @@
 import type { TokenPilotProductCommandResult } from "@tokenpilot/host-adapter";
-import { createProductSurfaceCommandHandler } from "@tokenpilot/product-surface";
 import {
-  type CliHostId,
   readCliContextState,
   updateCliContextState,
 } from "./context-store.js";
-import { createClaudeCodeCliBridge } from "./hosts/claude-code.js";
-import { createCodexCliBridge } from "./hosts/codex.js";
-import { createOpenClawCliBridge } from "./hosts/openclaw.js";
+import { CLI_HOSTS, parseCliHostId, type CliHostId } from "./hosts/registry.js";
+import { createCliHostRuntime } from "./hosts/factory.js";
 import { handleStandaloneVisualCommandWithSelection } from "./hosts/visual.js";
 import { formatCliUsage } from "./usage.js";
 
@@ -15,11 +12,6 @@ type HostTarget = {
   host: CliHostId;
   sessionId?: string;
 };
-
-function parseHost(value: string | undefined): CliHostId | undefined {
-  if (value === "openclaw" || value === "codex" || value === "claude-code") return value;
-  return undefined;
-}
 
 function parseBooleanContextCommand(args: string[]): boolean {
   return args.length === 1 && args[0] === "context";
@@ -43,16 +35,14 @@ async function resolveTarget(argv: string[]): Promise<{
     const lines = [
       "LightMem2 CLI context:",
       `- lastActiveHost: ${state.lastActiveHost ?? "(unset)"}`,
-      `- openclaw session: ${state.lastSessionByHost?.openclaw ?? "(unset)"}`,
-      `- codex session: ${state.lastSessionByHost?.codex ?? "(unset)"}`,
-      `- claude-code session: ${state.lastSessionByHost?.["claude-code"] ?? "(unset)"}`,
+      ...CLI_HOSTS.map((host) => `- ${host.hostId} session: ${state.lastSessionByHost?.[host.hostId] ?? "(unset)"}`),
       `- lastUpdatedAt: ${state.lastUpdatedAt ?? "(unset)"}`,
     ];
     return { commandArgs: [], handledText: lines.join("\n") };
   }
 
   if (argv[0] === "use") {
-    const host = parseHost(argv[1]);
+    const host = parseCliHostId(argv[1]);
     if (!host) {
       return { commandArgs: [], handledText: `Unknown host.\n\n${formatCliUsage()}` };
     }
@@ -61,10 +51,8 @@ async function resolveTarget(argv: string[]): Promise<{
       if (!sessionId) {
         return { commandArgs: [], handledText: "Missing session id." };
       }
-      if (host === "codex") {
-        const codex = createCodexCliBridge({ host: "codex", sessionId });
-        sessionId = (await codex.resolveSessionId(sessionId)) ?? sessionId;
-      }
+      const runtime = createCliHostRuntime({ host, sessionId });
+      sessionId = (await runtime.resolveSessionId(sessionId)) ?? sessionId;
       await updateCliContextState({ host, sessionId });
       return { commandArgs: [], handledText: `Default context = ${host} / ${sessionId}` };
     }
@@ -72,7 +60,7 @@ async function resolveTarget(argv: string[]): Promise<{
     return { commandArgs: [], handledText: `Default host = ${host}` };
   }
 
-  const explicitHost = parseHost(argv[0]);
+  const explicitHost = parseCliHostId(argv[0]);
   if (explicitHost) {
     if (argv[1] === "session") {
       const sessionId = String(argv[2] ?? "").trim();
@@ -123,58 +111,18 @@ export async function dispatchCli(argv: string[]): Promise<TokenPilotProductComm
     };
   }
 
-  if (target.host === "codex") {
-    const { handleCommand, maybeResolveLatestSessionId, resolveSessionId } = createCodexCliBridge({
-      host: "codex",
-      sessionId: target.sessionId,
-    });
-    const result = await handleCommand({
-      args: commandArgs.join(" "),
-      sessionId: target.sessionId,
-    });
-
-    const resolvedSessionId = target.sessionId
-      ? await resolveSessionId(target.sessionId)
-      : await maybeResolveLatestSessionId();
-    await updateCliContextState({
-      host: target.host,
-      sessionId: resolvedSessionId,
-    });
-    return result;
-  }
-
-  if (target.host === "claude-code") {
-    const { handleCommand, maybeResolveLatestSessionId } = createClaudeCodeCliBridge({
-      host: "claude-code",
-      sessionId: target.sessionId,
-    });
-    const result = await handleCommand({
-      args: commandArgs.join(" "),
-      sessionId: target.sessionId,
-    });
-
-    const resolvedSessionId = target.sessionId ?? await maybeResolveLatestSessionId();
-    await updateCliContextState({
-      host: target.host,
-      sessionId: resolvedSessionId,
-    });
-    return result;
-  }
-
-  const { bridge, configAdapter, maybeResolveLatestSessionId } = createOpenClawCliBridge({
-    host: "openclaw",
+  const runtime = createCliHostRuntime({
+    host: target.host,
     sessionId: target.sessionId,
   });
-  const handler = createProductSurfaceCommandHandler({
-    bridge,
-    configAdapter,
-  });
-  const result = await handler({
+  const result = await runtime.handleCommand({
     args: commandArgs.join(" "),
     sessionId: target.sessionId,
   });
 
-  const resolvedSessionId = target.sessionId ?? await maybeResolveLatestSessionId();
+  const resolvedSessionId = target.sessionId
+    ? await runtime.resolveSessionId(target.sessionId)
+    : await runtime.maybeResolveLatestSessionId();
   await updateCliContextState({
     host: target.host,
     sessionId: resolvedSessionId,

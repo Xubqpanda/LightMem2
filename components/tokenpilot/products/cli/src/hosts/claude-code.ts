@@ -92,6 +92,7 @@ export function createClaudeCodeCliBridge(target: {
   bridge: TokenPilotProductSurfaceHostBridge;
   configAdapter: TokenPilotProductSurfaceConfigAdapter;
   maybeResolveLatestSessionId(): Promise<string | undefined>;
+  resolveSessionId(sessionId?: string): Promise<string | undefined>;
   handleCommand(ctx: { args: string; sessionId?: string }): Promise<{ text: string }>;
 } {
   const bridge: TokenPilotProductSurfaceHostBridge = {
@@ -152,6 +153,10 @@ export function createClaudeCodeCliBridge(target: {
     bridge,
     configAdapter: claudeCodeProductSurfaceConfigAdapter,
     maybeResolveLatestSessionId,
+    async resolveSessionId(sessionId?: string): Promise<string | undefined> {
+      const text = typeof sessionId === "string" ? sessionId.trim() : "";
+      return text || undefined;
+    },
     handleCommand,
   };
 }
