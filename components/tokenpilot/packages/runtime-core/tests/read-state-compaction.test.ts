@@ -500,3 +500,111 @@ export function saveConfig(file: string, text: string) {
   assert.match(second?.text ?? "", /export function loadConfig/);
   assert.doesNotMatch(second?.text ?? "", /\[code outlined lines=/);
 });
+
+test("runReductionBeforeCall carries disclosed read paths through metadata across turns", async () => {
+  const largeCode = `
+export function loadConfig(file: string) {
+  return file.trim();
+}
+
+export function saveConfig(file: string, text: string) {
+  return text + file;
+}
+`.repeat(30);
+
+  const firstTurn: RuntimeTurnContext = {
+    sessionId: "test-session",
+    sessionMode: "single",
+    provider: "test",
+    model: "test",
+    prompt: "",
+    budget: {
+      maxInputTokens: 100000,
+      reserveOutputTokens: 1000,
+    },
+    segments: [
+      buildSegment("read-1-output", "read", "/repo/config.ts", largeCode, "output"),
+    ],
+    metadata: {
+      workspaceDir: "/tmp",
+      policy: {
+        decisions: {
+          reduction: {
+            instructions: [
+              {
+                strategy: "tool_payload_trim",
+                segmentIds: ["read-1-output"],
+                parameters: { payloadKind: "stdout" },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const firstResult = await runReductionBeforeCall({
+    turnCtx: firstTurn,
+    passes: [
+      {
+        id: "tool_payload_trim",
+        phase: "before_call",
+        target: "context_segment",
+        options: {},
+      },
+    ],
+  });
+
+  const disclosedReadPaths = firstResult.turnCtx.metadata?.disclosedReadPaths;
+  assert.ok(Array.isArray(disclosedReadPaths));
+  assert.ok(disclosedReadPaths?.includes("/repo/config.ts".toLowerCase()));
+
+  const secondTurn: RuntimeTurnContext = {
+    sessionId: "test-session",
+    sessionMode: "single",
+    provider: "test",
+    model: "test",
+    prompt: "",
+    budget: {
+      maxInputTokens: 100000,
+      reserveOutputTokens: 1000,
+    },
+    segments: [
+      buildSegment("read-2-output", "read", "/repo/config.ts", largeCode, "output"),
+    ],
+    metadata: {
+      workspaceDir: "/tmp",
+      disclosedReadPaths,
+      policy: {
+        decisions: {
+          reduction: {
+            instructions: [
+              {
+                strategy: "tool_payload_trim",
+                segmentIds: ["read-2-output"],
+                parameters: { payloadKind: "stdout" },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const secondResult = await runReductionBeforeCall({
+    turnCtx: secondTurn,
+    passes: [
+      {
+        id: "tool_payload_trim",
+        phase: "before_call",
+        target: "context_segment",
+        options: {},
+      },
+    ],
+  });
+
+  const second = secondResult.turnCtx.segments.find((segment) => segment.id === "read-2-output");
+  assert.ok(second);
+  assert.match(second?.text ?? "", /export function loadConfig/);
+  assert.doesNotMatch(second?.text ?? "", /\[code outlined lines=/);
+});

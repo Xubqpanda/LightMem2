@@ -16,6 +16,7 @@ import { classifyReadStates, isReadOutputSegment } from "../reduction/read-state
 const DEFAULT_MAX_CHARS = 1200;
 const DEFAULT_HEAD_LINES = 8;
 const DEFAULT_TAIL_LINES = 8;
+const MAX_DISCLOSED_READ_PATHS = 128;
 
 type ToolPayloadTrimConfig = {
   maxChars: number;
@@ -194,6 +195,23 @@ const extractToolName = (segment: ContextSegment): string => {
   return "tool";
 };
 
+const normalizeDisclosedReadPath = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const readDisclosedReadPaths = (metadata: Record<string, unknown> | undefined): string[] => {
+  const raw = metadata?.disclosedReadPaths;
+  if (!Array.isArray(raw)) return [];
+  const next = new Set<string>();
+  for (const entry of raw) {
+    const normalized = normalizeDisclosedReadPath(entry);
+    if (normalized) next.add(normalized);
+  }
+  return [...next].slice(-MAX_DISCLOSED_READ_PATHS);
+};
+
 export const toolPayloadTrimPass: ReductionPassHandler = {
   async beforeCall({ turnCtx, spec }) {
     const cfg = resolveConfig(spec.options);
@@ -242,7 +260,7 @@ export const toolPayloadTrimPass: ReductionPassHandler = {
     const reducedKinds = new Set<ToolPayloadKind>();
     const reducedRoutes = new Set<string>();
     const readStateBySegmentId = classifyReadStates(turnCtx.segments);
-    const previouslyReadPaths = new Set<string>();
+    const previouslyReadPaths = new Set<string>(readDisclosedReadPaths(turnCtx.metadata));
 
     const workspaceDir =
       typeof turnCtx.metadata?.workspaceDir === "string"
@@ -269,7 +287,10 @@ export const toolPayloadTrimPass: ReductionPassHandler = {
       const segmentMeta = asObject(segment.metadata);
       const segmentPath = extractDataKey(segment);
       if (isReadOutputSegment(segment) && segmentMeta && segmentPath) {
-        previouslyReadPaths.add(segmentPath.trim().toLowerCase());
+        const normalizedPath = normalizeDisclosedReadPath(segmentPath);
+        if (normalizedPath) {
+          previouslyReadPaths.add(normalizedPath);
+        }
       }
       if (!reduced.changed) {
         nextSegments.push(segment);
@@ -346,6 +367,9 @@ export const toolPayloadTrimPass: ReductionPassHandler = {
       return {
         changed: false,
         skippedReason: skippedNoNetSavings > 0 ? "no_net_savings" : "no_segments_reduced",
+        metadata: {
+          disclosedReadPaths: [...previouslyReadPaths].slice(-MAX_DISCLOSED_READ_PATHS),
+        },
       };
     }
 
@@ -361,6 +385,7 @@ export const toolPayloadTrimPass: ReductionPassHandler = {
         reducedKinds: [...reducedKinds],
         reducedRoutes: [...reducedRoutes],
         archivePaths,
+        disclosedReadPaths: [...previouslyReadPaths].slice(-MAX_DISCLOSED_READ_PATHS),
       },
     };
   },
