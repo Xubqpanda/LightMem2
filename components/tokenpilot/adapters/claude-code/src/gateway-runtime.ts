@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { mkdir } from "node:fs/promises";
 import {
+  countTextWithPreciseTokens,
   createSseJsonStreamObserver,
   createStaticStatePathResolver,
   type HostGatewayForwarder,
@@ -31,6 +32,36 @@ export type ClaudeCodeGatewayRuntime = {
   baseUrl: string;
   close(): Promise<void>;
 };
+
+async function recordClaudeRequestReductionUx(params: {
+  stateDir: string;
+  sessionId: string;
+  model: string;
+  originalRequestText: string;
+  reducedRequestText: string;
+}): Promise<void> {
+  const beforeCount = countTextWithPreciseTokens(params.model, params.originalRequestText);
+  const afterCount = countTextWithPreciseTokens(params.model, params.reducedRequestText);
+  const countMode = beforeCount.mode === "openai_tokens" && afterCount.mode === "openai_tokens"
+    ? "openai_tokens"
+    : "chars";
+  const savedCount = countMode === "chars"
+    ? Math.max(0, params.originalRequestText.length - params.reducedRequestText.length)
+    : Math.max(0, beforeCount.count - afterCount.count);
+  if (savedCount <= 0) return;
+  await recordUxEffect(params.stateDir, {
+    at: new Date().toISOString(),
+    sessionId: params.sessionId,
+    model: params.model,
+    countMode,
+    beforeCount: countMode === "chars" ? params.originalRequestText.length : beforeCount.count,
+    afterCount: countMode === "chars" ? params.reducedRequestText.length : afterCount.count,
+    savedCount,
+    details: {
+      requestSavedCount: savedCount,
+    },
+  });
+}
 
 function extractWorkspaceHint(envelope: {
   instructions?: string;
@@ -88,20 +119,6 @@ async function recordClaudeGatewayTurn(params: {
     stream: params.stream,
     updatedAt,
   });
-  if (params.reductionSavedChars > 0) {
-    await recordUxEffect(params.stateDir, {
-      at: updatedAt,
-      sessionId: params.sessionId,
-      model: params.model,
-      countMode: "chars",
-      beforeCount: params.requestChars,
-      afterCount: Math.max(0, params.requestChars - params.reductionSavedChars),
-      savedCount: params.reductionSavedChars,
-      details: {
-        requestSavedCount: params.reductionSavedChars,
-      },
-    });
-  }
 }
 
 export async function startClaudeCodeGatewayRuntime(params: {
@@ -146,6 +163,9 @@ export async function startClaudeCodeGatewayRuntime(params: {
       let envelope = codec.decodeRequest(payload, {
         headers: req.headers as Record<string, string | string[] | undefined>,
       });
+      const originalRequestText = typeof envelope.metadata?.inputText === "string"
+        ? envelope.metadata.inputText
+        : "";
       if (envelope.model.startsWith("tokenpilot/")) {
         envelope = {
           ...envelope,
@@ -214,6 +234,9 @@ export async function startClaudeCodeGatewayRuntime(params: {
       });
       const reductionSummary = prepared.reductionSummary;
       payload = codec.encodeRequest(prepared.envelope);
+      const reducedRequestText = typeof prepared.envelope.metadata?.inputText === "string"
+        ? prepared.envelope.metadata.inputText
+        : "";
 
       await appendClaudeCodeTrace(config.stateDir, {
         stage: "gateway_before_call",
@@ -250,6 +273,13 @@ export async function startClaudeCodeGatewayRuntime(params: {
           const responseId = typeof snapshot.metadata?.responseId === "string" ? snapshot.metadata.responseId : undefined;
           const previousResponseId =
             typeof snapshot.metadata?.previousResponseId === "string" ? snapshot.metadata.previousResponseId : undefined;
+          await recordClaudeRequestReductionUx({
+            stateDir: config.stateDir,
+            sessionId,
+            model: prepared.envelope.model,
+            originalRequestText,
+            reducedRequestText,
+          });
           await appendClaudeCodeTrace(config.stateDir, {
             stage: "gateway_after_call",
             sessionId,
@@ -313,6 +343,13 @@ export async function startClaudeCodeGatewayRuntime(params: {
       } catch {
         assistantChars = 0;
       }
+      await recordClaudeRequestReductionUx({
+        stateDir: config.stateDir,
+        sessionId,
+        model: prepared.envelope.model,
+        originalRequestText,
+        reducedRequestText,
+      });
       await appendClaudeCodeTrace(config.stateDir, {
         stage: "gateway_after_call",
         sessionId,

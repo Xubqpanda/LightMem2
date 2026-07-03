@@ -1,12 +1,10 @@
-import { execFile } from "node:child_process";
-import { dirname, join } from "node:path";
-import { access } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
+import { dirname } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { countTextWithPreciseTokens } from "@tokenpilot/host-adapter";
 import { pluginStateSubdirCandidates, pluginStateSubdirWriteTargets } from "@tokenpilot/runtime-core";
 import { appendJsonl } from "../../trace/io.js";
 
-export type CountMode = "litellm_tokens" | "chars";
+export type CountMode = "openai_tokens" | "chars";
 
 export type UxEffectDetails = {
   requestSavedCount?: number;
@@ -63,16 +61,6 @@ export function serializeCanonicalInputForUx(input: unknown): string {
   return JSON.stringify(canonicalizeInputForUx(input));
 }
 
-const TOKEN_COUNTER_SCRIPT_CANDIDATES = Array.from(new Set([
-  process.env.TOKENPILOT_TOKEN_COUNTER_SCRIPT,
-  // Bundled plugin runtime: dist/index.js -> ../scripts/token_counter.py
-  join(__dirname, "../scripts/token_counter.py"),
-  // Alternate bundle layouts / older installs.
-  join(__dirname, "../../scripts/token_counter.py"),
-  // Source-tree execution during local dev.
-  join(__dirname, "../../../scripts/token_counter.py"),
-].filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
-
 function latestUxEffectPathCandidates(stateDir: string): string[] {
   return pluginStateSubdirCandidates(stateDir, "ux-effects", "latest.json");
 }
@@ -89,81 +77,11 @@ function sessionUxAggregateWriteTargets(stateDir: string, sessionId: string): st
   return pluginStateSubdirWriteTargets(stateDir, "ux-effects", "sessions", `${sessionId}.json`);
 }
 
-async function resolveTokenCounterScript(): Promise<string | null> {
-  for (const candidate of TOKEN_COUNTER_SCRIPT_CANDIDATES) {
-    try {
-      await access(candidate, fsConstants.R_OK);
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-  return null;
-}
-
-function normalizeModelForCounter(model: string): string {
-  const trimmed = String(model || "").trim();
-  if (!trimmed) return "gpt-5.4-mini";
-  if (trimmed.startsWith("tokenpilot/")) return trimmed.slice("tokenpilot/".length);
-  if (trimmed.startsWith("lightmem2/")) return trimmed.slice("lightmem2/".length);
-  return trimmed;
-}
-
-function runExecFile(
-  file: string,
-  args: string[],
-  input: string,
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      file,
-      args,
-      {
-        encoding: "utf8",
-        maxBuffer: 4 * 1024 * 1024,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr || error.message));
-          return;
-        }
-        resolve({ stdout, stderr });
-      },
-    );
-    child.stdin?.end(input);
-  });
-}
-
 export async function countTokensWithFallback(
   model: string,
   text: string,
 ): Promise<{ count: number; mode: CountMode }> {
-  const normalizedModel = normalizeModelForCounter(model);
-  const payload = JSON.stringify({
-    model: normalizedModel,
-    text,
-  });
-
-  try {
-    const scriptPath = await resolveTokenCounterScript();
-    if (scriptPath) {
-      const out = await runExecFile("python3", [scriptPath], payload);
-      const parsed = JSON.parse(out.stdout);
-      if (parsed?.ok === true && Number.isFinite(parsed?.tokens)) {
-        return {
-          count: Math.max(0, Number(parsed.tokens)),
-          mode: "litellm_tokens",
-        };
-      }
-    }
-  } catch {
-    // fall through to raw char counting
-  }
-
-  return {
-    count: text.length,
-    mode: "chars",
-  };
+  return countTextWithPreciseTokens(model, text);
 }
 
 export async function recordUxEffect(
@@ -199,9 +117,9 @@ export async function recordUxEffect(
           sessionId: String(parsed.sessionId ?? record.sessionId),
           turns: Number(parsed.turns ?? 0),
           latestCountMode:
-            parsed.latestCountMode === "chars" || parsed.latestCountMode === "litellm_tokens"
+            parsed.latestCountMode === "chars" || parsed.latestCountMode === "openai_tokens"
               ? parsed.latestCountMode
-              : "litellm_tokens",
+              : "openai_tokens",
           tokenOptimizedTurns: Number(parsed.tokenOptimizedTurns ?? parsed.optimizedTurns ?? 0),
           tokenSavedCount: Number(parsed.tokenSavedCount ?? parsed.savedTokens ?? 0),
           avgSavedTokensPerOptimizedTurn: Number(parsed.avgSavedTokensPerOptimizedTurn ?? 0),
@@ -219,7 +137,7 @@ export async function recordUxEffect(
 
   current.turns += 1;
   current.latestCountMode = record.countMode;
-  if (record.countMode === "litellm_tokens") {
+  if (record.countMode === "openai_tokens") {
     if (record.savedCount > 0) current.tokenOptimizedTurns += 1;
     current.tokenSavedCount += record.savedCount;
     current.avgSavedTokensPerOptimizedTurn = current.tokenOptimizedTurns > 0

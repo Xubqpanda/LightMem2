@@ -6,7 +6,9 @@ import {
   prepareObservedBeforeCall,
 } from "@tokenpilot/product-surface";
 import {
+  countTextWithPreciseTokens,
   createStaticStatePathResolver,
+  recordUxEffect,
   sendJsonResponse,
   startHostGatewayRuntimeServer,
   setForwardResponseHeaders,
@@ -50,6 +52,36 @@ export type CodexProxyRuntime = {
   baseUrl: string;
   close(): Promise<void>;
 };
+
+async function recordCodexUxReduction(params: {
+  stateDir: string;
+  sessionId: string;
+  model: string;
+  originalRequestText: string;
+  reducedRequestText: string;
+}): Promise<void> {
+  const beforeCount = countTextWithPreciseTokens(params.model, params.originalRequestText);
+  const afterCount = countTextWithPreciseTokens(params.model, params.reducedRequestText);
+  const countMode = beforeCount.mode === "openai_tokens" && afterCount.mode === "openai_tokens"
+    ? "openai_tokens"
+    : "chars";
+  const savedCount = countMode === "chars"
+    ? Math.max(0, params.originalRequestText.length - params.reducedRequestText.length)
+    : Math.max(0, beforeCount.count - afterCount.count);
+  if (savedCount <= 0) return;
+  await recordUxEffect(params.stateDir, {
+    at: new Date().toISOString(),
+    sessionId: params.sessionId,
+    model: params.model,
+    countMode,
+    beforeCount: countMode === "chars" ? params.originalRequestText.length : beforeCount.count,
+    afterCount: countMode === "chars" ? params.reducedRequestText.length : afterCount.count,
+    savedCount,
+    details: {
+      requestSavedCount: savedCount,
+    },
+  });
+}
 
 function normalizeResponsesInputForUpstream(input: any): void {
   if (!Array.isArray(input)) return;
@@ -95,6 +127,7 @@ export async function startCodexResponsesProxy(params: {
     async handleRequest({ req, res, body }) {
       const payload = JSON.parse(body);
       normalizeResponsesInputForUpstream(payload?.input);
+      const originalRequestText = extractResponsesInputText(payload?.input);
       const inboundPromptCacheKey =
         typeof payload?.prompt_cache_key === "string" ? payload.prompt_cache_key.trim() : "";
       const mappedPreviousSessionId =
@@ -148,6 +181,7 @@ export async function startCodexResponsesProxy(params: {
           stateDir: config.stateDir,
           sessionId,
           model,
+          recordUxEffectNow: false,
           buildStability({ originalEnvelope, prepared }) {
             return prepared.diagnostics.stablePrefixApplied === true
               ? {
@@ -220,6 +254,13 @@ export async function startCodexResponsesProxy(params: {
           const rawStreamText = Buffer.concat(streamChunks).toString("utf8");
           const snapshot = snapshotCodexResponsesStream(rawStreamText);
           try {
+            await recordCodexUxReduction({
+              stateDir: config.stateDir,
+              sessionId,
+              model,
+              originalRequestText,
+              reducedRequestText: requestText,
+            });
             await appendTrace(config.stateDir, {
               stage: "proxy_after_call",
               sessionId,
@@ -304,6 +345,13 @@ export async function startCodexResponsesProxy(params: {
       } catch {
         // Some upstream error payloads may not match the expected Responses shape.
       }
+      await recordCodexUxReduction({
+        stateDir: config.stateDir,
+        sessionId,
+        model,
+        originalRequestText,
+        reducedRequestText: requestText,
+      });
       await upsertCodexSessionSnapshot(config.stateDir, sessionId, {
         latestResponseId: responseId,
         previousResponseId,

@@ -161,11 +161,11 @@ export async function recordNonStreamingUxEffect(params: {
   const responseBeforeCount = await helpers.countTokensWithFallback(countingModel, originalResponseText);
   const responseAfterCount = await helpers.countTokensWithFallback(countingModel, finalResponseText);
   const countMode =
-    inputBeforeCount.mode === "litellm_tokens"
-    && inputAfterCount.mode === "litellm_tokens"
-    && responseBeforeCount.mode === "litellm_tokens"
-    && responseAfterCount.mode === "litellm_tokens"
-      ? "litellm_tokens"
+    inputBeforeCount.mode === "openai_tokens"
+    && inputAfterCount.mode === "openai_tokens"
+    && responseBeforeCount.mode === "openai_tokens"
+    && responseAfterCount.mode === "openai_tokens"
+      ? "openai_tokens"
       : "chars";
   const requestSavedCount = countMode === "chars"
     ? Math.max(0, beforeReductionCanonicalInput.length - afterReductionCanonicalInput.length)

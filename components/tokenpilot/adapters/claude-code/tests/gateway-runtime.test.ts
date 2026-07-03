@@ -192,8 +192,9 @@ test("gateway runtime records session-state and ux-effects after a reduced reque
 
     const ux = JSON.parse(
       await readFile(join(dir, "state", "ux-effects", "latest.json"), "utf8"),
-    ) as { sessionId: string; savedCount: number };
+    ) as { sessionId: string; savedCount: number; countMode?: string };
     assert.equal(ux.sessionId, "sess-state-1");
+    assert.equal(ux.countMode, "chars");
     assert.ok(ux.savedCount > 0);
 
     const sessions = await readVisualSessionList(join(dir, "state"));

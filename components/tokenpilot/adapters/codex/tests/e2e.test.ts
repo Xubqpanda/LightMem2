@@ -201,7 +201,7 @@ test("Codex host e2e wires install, proxy reduction, report/visual, and MCP reco
         /proxy healthy: yes/,
       ],
       report: {
-        unitLabel: "chars",
+        unitLabel: "tokens",
       },
       visual: {
         header: "LightMem2 visual:",
@@ -218,6 +218,11 @@ test("Codex host e2e wires install, proxy reduction, report/visual, and MCP reco
     assert.match(sessions[0]?.sessionId ?? "", /^codex-synth-/);
     assert.equal(sessions[0]?.stabilityCount, 1);
     assert.ok((sessions[0]?.reductionCount ?? 0) > 0);
+    const latestUx = JSON.parse(
+      await readFile(join(stateDir, "ux-effects", "latest.json"), "utf8"),
+    ) as { countMode?: string; savedCount?: number };
+    assert.equal(latestUx.countMode, "openai_tokens");
+    assert.ok((latestUx.savedCount ?? 0) > 0);
 
     const visual = await readVisualSessionData(stateDir, String(sessions[0]?.sessionId ?? ""));
     assert.equal(visual.stability.length, 1);

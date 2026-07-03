@@ -40,10 +40,10 @@ export async function recordStreamingUxEffect(params: {
     const inputAfterCount = await helpers.countTokensWithFallback(model || upstreamModel || "gpt-5.4-mini", afterReductionInputText);
     const responseCount = await helpers.countTokensWithFallback(model || upstreamModel || "gpt-5.4-mini", responseText);
     const countMode =
-      inputBeforeCount.mode === "litellm_tokens"
-      && inputAfterCount.mode === "litellm_tokens"
-      && responseCount.mode === "litellm_tokens"
-        ? "litellm_tokens"
+      inputBeforeCount.mode === "openai_tokens"
+      && inputAfterCount.mode === "openai_tokens"
+      && responseCount.mode === "openai_tokens"
+        ? "openai_tokens"
         : "chars";
     const requestSavedCount = countMode === "chars"
       ? Math.max(0, beforeReductionCanonicalInput.length - afterReductionCanonicalInput.length)
