@@ -516,6 +516,112 @@ test("runReductionBeforeCall does not retrim read-state compaction recovery stub
   assert.equal(result.report[1]?.skippedReason, "recovery_exempt");
 });
 
+test("runReductionBeforeCall preserves recovery reads while still trimming neighboring segments", async () => {
+  const recovered = [
+    "[Memory Fault Recovery] Recovered content for: repo:README.md",
+    "Recovered lines: 20-40",
+    "--- Recovered Content ---",
+    "# Task Plan",
+    "- TODO: preserve this recovered block",
+    "- Acceptance criteria: no retrim",
+    "--- End Recovered Content ---",
+  ].join("\n");
+  const oversizedToolOutput = JSON.stringify(
+    Array.from({ length: 20 }, (_value, index) => ({
+      type: "result",
+      id: index,
+      text: `payload-${index}-${"x".repeat(80)}`,
+    })),
+    null,
+    2,
+  );
+
+  const turnCtx: RuntimeTurnContext = {
+    sessionId: "test-session",
+    sessionMode: "single",
+    provider: "test",
+    model: "test",
+    prompt: "",
+    budget: {
+      maxInputTokens: 100000,
+      reserveOutputTokens: 1000,
+    },
+    segments: [
+      {
+        id: "recovery-output",
+        kind: "volatile",
+        priority: 1,
+        text: recovered,
+        metadata: {
+          toolName: "read",
+          path: "/repo/README.md",
+          fieldName: "output",
+          recovery: {
+            source: "memory_fault_recover",
+            skipReduction: true,
+          },
+          toolPayload: {
+            toolName: "read",
+            path: "/repo/README.md",
+          },
+        },
+      },
+      {
+        id: "json-output",
+        kind: "volatile",
+        priority: 1,
+        text: oversizedToolOutput,
+        metadata: {
+          toolName: "bash",
+          path: "/tmp/output.json",
+          fieldName: "output",
+          toolPayload: {
+            toolName: "bash",
+            path: "/tmp/output.json",
+          },
+        },
+      },
+    ],
+    metadata: {
+      workspaceDir: "/tmp",
+      latestUserQuery: "show me the recovered file and summarize the json output",
+      policy: {
+        decisions: {
+          reduction: {
+            instructions: [
+              {
+                strategy: "tool_payload_trim",
+                segmentIds: ["recovery-output", "json-output"],
+                parameters: {
+                  payloadKind: "stdout",
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const result = await runReductionBeforeCall({
+    turnCtx,
+    passes: resolveReductionPasses({
+      maxToolChars: 160,
+    }),
+  });
+
+  const recoverySegment = result.turnCtx.segments.find((segment) => segment.id === "recovery-output");
+  const jsonSegment = result.turnCtx.segments.find((segment) => segment.id === "json-output");
+  assert.ok(recoverySegment);
+  assert.ok(jsonSegment);
+  assert.equal(recoverySegment?.text, recovered);
+  assert.notEqual(jsonSegment?.text, oversizedToolOutput);
+  assert.match(jsonSegment?.text ?? "", /"reduced": "json_array"/);
+  assert.equal(result.report[1]?.id, "tool_payload_trim");
+  assert.equal(result.report[1]?.changed, true);
+  assert.deepEqual(result.report[1]?.touchedSegmentIds, ["json-output"]);
+});
+
 test("runReductionBeforeCall outlines the first large code read and leaves the second read intact", async () => {
   const largeCode = `
 export function loadConfig(file: string) {
