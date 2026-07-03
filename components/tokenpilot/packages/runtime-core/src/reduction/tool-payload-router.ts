@@ -98,6 +98,9 @@ const CODE_ALERT_RE = /\b(throw\s+new|throw\s+|catch\s*\(|Error\b|Exception\b|TO
 const NUMBERED_CODE_LINE_RE = /^\s*\d+\s*(?:[|:]\s*|\t|\s{2,})(.+)$/;
 const CODE_DOC_RE = /^\s*(?:\/\*\*|\/\/|#|"""|''')/;
 const CODE_RANGE_HINT_RE = /\b(offset|limit|start[_-]?line|end[_-]?line|line[_-]?range|ranges)\b/i;
+const MARKDOWN_HEADING_RE = /^\s{0,3}#{1,6}\s+\S+/;
+const MARKDOWN_LIST_RE = /^\s*(?:[-*+]|\d+\.)\s+\S+/;
+const TASK_DOC_KEYWORD_RE = /\b(todo|task|plan|next step|acceptance criteria|deliverable|milestone|checklist)\b/i;
 
 function clipText(value: string, maxChars: number): string {
   return value.length <= maxChars ? value : `${value.slice(0, maxChars)}...`;
@@ -404,6 +407,53 @@ function summarizeLogOutput(text: string, cfg: PayloadBlockConfig): string {
   return merged.join("\n").trim();
 }
 
+function summarizeMarkdownDoc(text: string, cfg: PayloadBlockConfig): string {
+  if (text.length <= cfg.maxChars) return text;
+  const lines = text.split("\n");
+  const selected: string[] = [];
+  let headingCount = 0;
+  let bulletCount = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (MARKDOWN_HEADING_RE.test(line)) {
+      selected.push(trimmed);
+      headingCount += 1;
+      continue;
+    }
+    if (MARKDOWN_LIST_RE.test(line) && bulletCount < Math.max(4, cfg.maxItems * 2)) {
+      selected.push(trimmed);
+      bulletCount += 1;
+    }
+  }
+
+  const head = lines.slice(0, Math.min(cfg.keepHeadLines, 6)).filter((line) => line.trim().length > 0);
+  return [
+    `[markdown reduced headings=${headingCount} bullets=${bulletCount} total_lines=${lines.length}]`,
+    ...head,
+    ...selected.slice(0, Math.max(6, cfg.maxItems * 3)),
+  ].join("\n").trim();
+}
+
+function summarizeTaskDoc(text: string, cfg: PayloadBlockConfig): string {
+  if (text.length <= cfg.maxChars) return text;
+  const lines = text.split("\n");
+  const selected: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (MARKDOWN_HEADING_RE.test(line) || MARKDOWN_LIST_RE.test(line) || TASK_DOC_KEYWORD_RE.test(line)) {
+      selected.push(trimmed);
+    }
+    if (selected.length >= Math.max(8, cfg.maxItems * 3)) break;
+  }
+  return [
+    `[task doc reduced highlights=${selected.length} total_lines=${lines.length}]`,
+    ...selected,
+  ].join("\n").trim();
+}
+
 function looksLikeExplicitRangeIntent(text: string, hint: ToolPayloadHint | undefined): boolean {
   const path = hint?.path?.trim().toLowerCase() ?? "";
   if (CODE_RANGE_HINT_RE.test(path)) return true;
@@ -703,6 +753,13 @@ function reduceByClassification(
         }
       }
       nextText = summarizeCodeLike(text, blockCfg);
+      break;
+    case "readme_doc":
+    case "markdown_doc":
+      nextText = summarizeMarkdownDoc(text, blockCfg);
+      break;
+    case "task_doc":
+      nextText = summarizeTaskDoc(text, blockCfg);
       break;
     case "plain_text":
       nextText = summarizeLineBlock(text, kind, blockCfg);

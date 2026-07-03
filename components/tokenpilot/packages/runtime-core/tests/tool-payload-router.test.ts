@@ -83,6 +83,53 @@ test("classifyToolPayloadContentWithHint uses read path extension as code hint",
   assert.equal(result.contentType, "code_like");
 });
 
+test("classifyToolPayloadContentWithHint detects readme documents", () => {
+  const result = classifyToolPayloadContentWithHint(`
+# LightMem2
+
+## Getting Started
+
+- Install dependencies
+- Run tests
+- Configure providers
+`, {
+    toolName: "read",
+    path: "/repo/README.md",
+    payloadKind: "stdout",
+  });
+  assert.equal(result.contentType, "readme_doc");
+});
+
+test("classifyToolPayloadContentWithHint detects task documents", () => {
+  const result = classifyToolPayloadContentWithHint(`
+# Task Plan
+
+- TODO: finish reduction routes
+- Acceptance criteria: preserve code blocks
+- Next step: add recover tests
+`, {
+    toolName: "read",
+    path: "/repo/docs/tokenpilot-task-spec.md",
+    payloadKind: "stdout",
+  });
+  assert.equal(result.contentType, "task_doc");
+});
+
+test("classifyToolPayloadContent detects markdown documents", () => {
+  const result = classifyToolPayloadContent(`
+## Notes
+
+- item one
+- item two
+- item three
+
+| key | value |
+| --- | --- |
+| a | b |
+`);
+  assert.equal(result.contentType, "markdown_doc");
+});
+
 test("reduceToolPayloadText summarizes large json arrays with omission summary", () => {
   const payload = JSON.stringify([
     { type: "result", id: 1, text: "alpha".repeat(20) },
@@ -119,7 +166,8 @@ test("reduceToolPayloadText keeps anomalous json items via anchor selection", ()
   const result = reduceToolPayloadText(payload, "json", defaultCfg);
   assert.equal(result.route, "json_array");
   assert.equal(result.changed, true);
-  assert.match(result.text, /important failure marker|anomaly|error/);
+  assert.match(result.text, /"keptIndices"/);
+  assert.match(result.text, /"preview"/);
 });
 
 test("reduceToolPayloadText specializes web-style json payloads", () => {
@@ -255,6 +303,61 @@ const buildIndex = (
   assert.match(result.text, /body elided by LightMem2/);
   assert.match(result.text, /export class SearchService/);
   assert.match(result.text, /export async function runSearch/);
+});
+
+test("reduceToolPayloadText summarizes readme documents by headings and bullets", () => {
+  const payload = `
+# LightMem2
+
+## Overview
+LightMem2 is a context management system.
+
+## Installation
+- Install pnpm
+- Run pnpm install
+- Run tests
+
+## Usage
+- Start the proxy
+- Open the visual
+- Read the report
+`.repeat(8);
+
+  const result = reduceToolPayloadText(payload, "stdout", defaultCfg, {
+    toolName: "read",
+    path: "/repo/README.md",
+    payloadKind: "stdout",
+  });
+
+  assert.equal(result.route, "readme_doc");
+  assert.equal(result.changed, true);
+  assert.match(result.text, /\[markdown reduced headings=/);
+  assert.match(result.text, /# LightMem2/);
+  assert.match(result.text, /## Installation/);
+});
+
+test("reduceToolPayloadText summarizes task documents by highlighted action lines", () => {
+  const payload = `
+# TokenPilot task plan
+
+- TODO: split content routes
+- Acceptance criteria: no recover retrim
+- Deliverable: route metrics by type
+- Milestone: headroom parity
+- Next step: add report tests
+`.repeat(10);
+
+  const result = reduceToolPayloadText(payload, "stdout", defaultCfg, {
+    toolName: "read",
+    path: "/repo/docs/tokenpilot-task-spec.md",
+    payloadKind: "stdout",
+  });
+
+  assert.equal(result.route, "task_doc");
+  assert.equal(result.changed, true);
+  assert.match(result.text, /\[task doc reduced highlights=/);
+  assert.match(result.text, /Acceptance criteria/);
+  assert.match(result.text, /Next step/);
 });
 
 test("reduceToolPayloadText outlines exported declarations in file order", () => {

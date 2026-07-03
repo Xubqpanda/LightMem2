@@ -5,6 +5,9 @@ export type ToolPayloadContentType =
   | "log_output"
   | "diff_output"
   | "code_like"
+  | "markdown_doc"
+  | "readme_doc"
+  | "task_doc"
   | "blob"
   | "plain_text";
 
@@ -29,6 +32,10 @@ const CODE_FENCE_RE = /```[\s\S]*?```/;
 const CODE_KEYWORD_RE = /\b(function|class|def|import|from|const|let|var|return|if|else|for|while|async|await|interface|type)\b/;
 const DIFF_HEADER_RE = /^(diff --git|diff --combined |diff --cc |--- a\/|\+\+\+ b\/|@@\s+-\d+,\d+\s+\+\d+,\d+\s+@@|@@@+\s+-\d+(?:,\d+)?\s+(?:-\d+(?:,\d+)?\s+)+\+\d+(?:,\d+)?\s+@@@+)/;
 const DIFF_CHANGE_RE = /^[+-][^+-]/;
+const MARKDOWN_HEADING_RE = /^\s{0,3}#{1,6}\s+\S+/;
+const MARKDOWN_LIST_RE = /^\s*(?:[-*+]|\d+\.)\s+\S+/;
+const MARKDOWN_TABLE_RE = /^\s*\|.+\|\s*$/;
+const TASK_DOC_KEYWORD_RE = /\b(todo|task|plan|next step|acceptance criteria|deliverable|milestone|checklist)\b/i;
 
 const CODE_EXTENSIONS = new Set([
   ".py",
@@ -64,6 +71,31 @@ function looksLikeCodePath(path: string | undefined): boolean {
     if (normalized.endsWith(ext)) return true;
   }
   return false;
+}
+
+function looksLikeMarkdown(lines: string[]): boolean {
+  if (lines.length < 3) return false;
+  const headingCount = countMatchingLines(lines, MARKDOWN_HEADING_RE);
+  const listCount = countMatchingLines(lines, MARKDOWN_LIST_RE);
+  const tableCount = countMatchingLines(lines, MARKDOWN_TABLE_RE);
+  return headingCount >= 1 || listCount >= Math.min(3, Math.ceil(lines.length * 0.25)) || tableCount >= 2;
+}
+
+function looksLikeReadme(path: string | undefined, text: string): boolean {
+  const normalizedPath = path?.trim().toLowerCase() ?? "";
+  if (/(^|\/)readme(\.[a-z0-9_-]+)?$/i.test(normalizedPath)) return true;
+  return /^#\s+.+/m.test(text) && /installation|usage|getting started|overview|configuration/i.test(text);
+}
+
+function looksLikeTaskDoc(path: string | undefined, text: string, lines: string[]): boolean {
+  const normalizedPath = path?.trim().toLowerCase() ?? "";
+  if (normalizedPath.includes("task") || normalizedPath.includes("plan") || normalizedPath.includes("spec")) {
+    return true;
+  }
+  const keywordHits = countMatchingLines(lines, TASK_DOC_KEYWORD_RE);
+  const markdownLike = looksLikeMarkdown(lines);
+  const hasTaskHeading = lines.some((line) => /^\s{0,3}#{1,6}\s+.*\b(task|plan|checklist|milestone|acceptance)\b/i.test(line));
+  return (markdownLike || hasTaskHeading) && keywordHits >= Math.min(2, Math.ceil(lines.length * 0.15));
 }
 
 function tryParseJson(text: string): unknown | undefined {
@@ -142,6 +174,7 @@ export function classifyToolPayloadContentWithHint(
   const toolName = hint?.toolName?.trim().toLowerCase();
   const fieldName = hint?.fieldName?.trim().toLowerCase();
   const payloadKind = hint?.payloadKind;
+  const normalizedPath = hint?.path?.trim();
 
   if (payloadKind === "blob") {
     return { contentType: "blob", reason: "payload_kind_blob" };
@@ -156,6 +189,15 @@ export function classifyToolPayloadContentWithHint(
     const lines = trimmed.split("\n").filter((line) => line.length > 0);
     if (looksLikeCodePath(hint?.path)) {
       return { contentType: "code_like", reason: "read_path_code_hint" };
+    }
+    if (looksLikeReadme(normalizedPath, trimmed)) {
+      return { contentType: "readme_doc", reason: "readme_path_or_content_hint" };
+    }
+    if (looksLikeTaskDoc(normalizedPath, trimmed, lines)) {
+      return { contentType: "task_doc", reason: "task_doc_path_or_content_hint" };
+    }
+    if (looksLikeMarkdown(lines)) {
+      return { contentType: "markdown_doc", reason: "markdown_structure_hint" };
     }
     if (looksLikeCode(trimmed, lines)) {
       return { contentType: "code_like", reason: "read_code_hint" };
@@ -211,6 +253,15 @@ export function classifyToolPayloadContentWithHint(
   }
   if (searchLike) {
     return { contentType: "search_results", reason: "search_line_pattern" };
+  }
+  if (looksLikeReadme(normalizedPath, trimmed)) {
+    return { contentType: "readme_doc", reason: "readme_content_pattern" };
+  }
+  if (looksLikeTaskDoc(normalizedPath, trimmed, lines)) {
+    return { contentType: "task_doc", reason: "task_doc_content_pattern" };
+  }
+  if (looksLikeMarkdown(lines)) {
+    return { contentType: "markdown_doc", reason: "markdown_structure_pattern" };
   }
   if (looksLikeCode(trimmed, lines)) {
     return { contentType: "code_like", reason: "code_structure_pattern" };

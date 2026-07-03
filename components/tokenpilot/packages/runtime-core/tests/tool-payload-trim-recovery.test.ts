@@ -110,3 +110,37 @@ test("toolPayloadTrimPass respects recovery skip marker for line-range excerpts"
   assert.equal(result?.changed, false);
   assert.equal(result?.skippedReason, "recovery_exempt");
 });
+
+test("toolPayloadTrimPass keeps markdown-shaped recovery output exempt from retrim", async () => {
+  const recovered = [
+    "[Memory Fault Recovery] Recovered content for: repo:README.md",
+    "Recovered lines: 20-40",
+    "--- Recovered Content ---",
+    "# Task Plan",
+    "- TODO: keep this focused window intact",
+    "- Acceptance criteria: do not retrim recovery output",
+    "--- End Recovered Content ---",
+  ].join("\n");
+
+  const result = await toolPayloadTrimPass.beforeCall?.({
+    turnCtx: buildTurnContext(recovered, {
+      path: "/repo/README.md",
+      recovery: {
+        source: "memory_fault_recover",
+        skipReduction: true,
+      },
+    }),
+    spec: {
+      id: "tool_payload_trim",
+      phase: "before_call",
+      target: "tool_payload",
+      options: {
+        maxChars: 120,
+      },
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(result?.changed, false);
+  assert.equal(result?.skippedReason, "recovery_exempt");
+});
