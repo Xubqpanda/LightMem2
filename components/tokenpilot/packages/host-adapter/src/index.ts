@@ -29,5 +29,6 @@ export * from "./state/path-resolver.js";
 export * from "./state/file-store.js";
 export * from "./state/session-store.js";
 export * from "./state/trace-store.js";
+export * from "./state/token-counter.js";
 export * from "./state/ux-store.js";
 export * from "./testing/host-e2e.js";

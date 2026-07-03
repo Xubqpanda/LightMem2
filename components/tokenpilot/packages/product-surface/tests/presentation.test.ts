@@ -39,7 +39,7 @@ test("formatSessionReport falls back to token aggregates when latest mode is uns
     sessionId: "session-token-1",
     aggregate: {
       turns: 5,
-      latestCountMode: "litellm_tokens",
+      latestCountMode: "openai_tokens",
       tokenOptimizedTurns: 3,
       tokenSavedCount: 4500,
       avgSavedTokensPerOptimizedTurn: 1500,

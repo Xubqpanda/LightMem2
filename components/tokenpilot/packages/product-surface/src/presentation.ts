@@ -12,7 +12,7 @@ import {
 
 export type ProductSurfaceLatestUxEffect = {
   sessionId?: string;
-  countMode?: "litellm_tokens" | "chars";
+  countMode?: "openai_tokens" | "chars";
   details?: {
     requestSavedCount?: number;
     responseSavedCount?: number;
@@ -21,7 +21,7 @@ export type ProductSurfaceLatestUxEffect = {
 
 export type ProductSurfaceSessionAggregate = {
   turns: number;
-  latestCountMode?: "litellm_tokens" | "chars";
+  latestCountMode?: "openai_tokens" | "chars";
   tokenOptimizedTurns: number;
   tokenSavedCount: number;
   avgSavedTokensPerOptimizedTurn: number;
@@ -283,7 +283,7 @@ export function formatSessionReport(params: {
   overview?: ProductSurfaceSessionOverviewItem[];
 }): string {
   const { title, sessionId, aggregate, latest, detailsEnabled, recentMetrics, overview } = params;
-  const latestCountMode = latest?.countMode ?? aggregate.latestCountMode ?? "litellm_tokens";
+  const latestCountMode = latest?.countMode ?? aggregate.latestCountMode ?? "openai_tokens";
   const unitLabel = countModeLabel(latestCountMode);
   const savedCount = latestCountMode === "chars" ? aggregate.charSavedCount : aggregate.tokenSavedCount;
   const optimizedTurns = latestCountMode === "chars" ? aggregate.charOptimizedTurns : aggregate.tokenOptimizedTurns;

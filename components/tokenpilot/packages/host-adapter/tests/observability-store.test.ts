@@ -93,7 +93,7 @@ test("shared ux store keeps token and char aggregates independently", async () =
       at: "2026-06-28T12:11:00.000Z",
       sessionId: "session-ux-mixed",
       model: "test-model",
-      countMode: "litellm_tokens",
+      countMode: "openai_tokens",
       beforeCount: 800,
       afterCount: 650,
       savedCount: 150,
@@ -102,9 +102,9 @@ test("shared ux store keeps token and char aggregates independently", async () =
     const latest = await readLatestUxEffect(stateDir);
     const aggregate = await readUxSessionAggregate(stateDir, "session-ux-mixed");
 
-    assert.equal(latest?.countMode, "litellm_tokens");
+    assert.equal(latest?.countMode, "openai_tokens");
     assert.equal(aggregate?.turns, 2);
-    assert.equal(aggregate?.latestCountMode, "litellm_tokens");
+    assert.equal(aggregate?.latestCountMode, "openai_tokens");
     assert.equal(aggregate?.charOptimizedTurns, 1);
     assert.equal(aggregate?.charSavedCount, 300);
     assert.equal(aggregate?.avgSavedCharsPerOptimizedTurn, 300);

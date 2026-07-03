@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { appendJsonl, readJsonFile, writeJsonFileAtomic } from "./file-store.js";
 
-export type TokenPilotUxCountMode = "litellm_tokens" | "chars";
+export type TokenPilotUxCountMode = "openai_tokens" | "chars";
 
 export type TokenPilotUxEffectRecord = {
   at: string;
@@ -67,7 +67,7 @@ export async function recordUxEffect(
 
   current.turns += 1;
   current.latestCountMode = record.countMode;
-  if (record.countMode === "litellm_tokens") {
+  if (record.countMode === "openai_tokens") {
     if (record.savedCount > 0) current.tokenOptimizedTurns += 1;
     current.tokenSavedCount += record.savedCount;
     current.avgSavedTokensPerOptimizedTurn = current.tokenOptimizedTurns > 0
