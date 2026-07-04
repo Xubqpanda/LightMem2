@@ -36,6 +36,31 @@ function isProcessRunning(pid: number): boolean {
   }
 }
 
+async function waitForProcessExit(pid: number, timeoutMs = 3_000, intervalMs = 100): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (!isProcessRunning(pid)) return true;
+    await sleep(intervalMs);
+  }
+  return !isProcessRunning(pid);
+}
+
+async function terminateProcess(pid: number): Promise<void> {
+  if (!isProcessRunning(pid)) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return;
+  }
+  if (await waitForProcessExit(pid)) return;
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // The process may have exited between escalation attempts.
+  }
+  await waitForProcessExit(pid, 2_000).catch(() => undefined);
+}
+
 async function isProxyHealthy(config: TokenPilotCodexConfig): Promise<boolean> {
   try {
     const resp = await fetch(`http://127.0.0.1:${config.proxyPort}/health`);
@@ -85,7 +110,14 @@ export async function startDaemon(config: TokenPilotCodexConfig, params?: {
   cliPath?: string;
 }): Promise<DaemonStatus & { started: boolean }> {
   const current = await readDaemonStatus(config);
-  if (current.running) return { ...current, started: false };
+  if (current.running) {
+    const healthy = await isProxyHealthy(config);
+    if (healthy) return { ...current, started: false };
+    if (current.pid) {
+      await terminateProcess(current.pid);
+    }
+    await rm(current.pidPath, { force: true }).catch(() => undefined);
+  }
   const { pidPath, logPath } = daemonPaths(config);
   await mkdir(dirname(pidPath), { recursive: true });
   const out = await open(logPath, "a");
@@ -127,11 +159,7 @@ export async function startDaemon(config: TokenPilotCodexConfig, params?: {
 export async function stopDaemon(config: TokenPilotCodexConfig): Promise<DaemonStatus & { stopped: boolean }> {
   const status = await readDaemonStatus(config);
   if (!status.running || !status.pid) return { ...status, stopped: false };
-  try {
-    process.kill(status.pid, "SIGTERM");
-  } catch {
-    // Process may have exited between status read and stop.
-  }
+  await terminateProcess(status.pid);
   await rm(status.pidPath, { force: true }).catch(() => undefined);
   return {
     ...status,

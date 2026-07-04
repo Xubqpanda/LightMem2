@@ -20,6 +20,7 @@ import {
   readCodexRootModelProvider,
   writeTokenPilotCodexConfig,
 } from "./config.js";
+import { stopDaemon } from "./daemon.js";
 import {
   defaultCodexSkillBridgeDir,
   installCommandSkillBridge,
@@ -371,6 +372,7 @@ export async function installCodexTokenPilot(params?: {
   const tokenPilotConfig = await loadTokenPilotCodexConfig(tokenPilotConfigPath);
   const previousProxyPort = tokenPilotConfig.proxyPort;
   const commandSkillsDir = defaultCodexSkillBridgeDir(dirname(codexConfigPath));
+  await stopDaemon(tokenPilotConfig).catch(() => undefined);
   tokenPilotConfig.proxyPort = await resolveAvailableCodexProxyPort(tokenPilotConfig.proxyPort);
   const existingRootProvider = await readCodexRootModelProvider(codexConfigPath);
   const persistedProviderName = tokenPilotConfig.providerName !== "tokenpilot"

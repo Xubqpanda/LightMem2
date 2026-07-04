@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawn } from "node:child_process";
 import { chmod, lstat, mkdtemp, mkdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { createServer } from "node:net";
 import {
   loadTokenPilotCodexConfig,
   normalizeTokenPilotCodexConfig,
   writeTokenPilotCodexConfig,
 } from "../src/config.js";
+import { daemonPaths, readDaemonStatus } from "../src/daemon.js";
 import { installCodexTokenPilot, resolveCodexHookCommandForInstall } from "../src/install.js";
 
 test("installCodexTokenPilot writes provider, MCP, and hooks with expected commands", async () => {
@@ -341,6 +342,77 @@ test("installCodexTokenPilot shifts the proxy port when the preferred port is al
     assert.equal(result.baseUrl, `http://127.0.0.1:${config.proxyPort}/v1`);
   } finally {
     await new Promise<void>((resolve) => blocker.server.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("installCodexTokenPilot stops an existing daemon before resolving the proxy port", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lightmem2-codex-install-stop-daemon-"));
+  let dummy: ReturnType<typeof spawn> | undefined;
+  try {
+    const codexConfigPath = join(dir, "config.toml");
+    const hooksConfigPath = join(dir, "hooks.json");
+    const tokenPilotConfigPath = join(dir, "tokenpilot.json");
+    const stateDir = join(dir, "state");
+    const config = normalizeTokenPilotCodexConfig({
+      proxyPort: 17680,
+      stateDir,
+    });
+    await writeTokenPilotCodexConfig(config, tokenPilotConfigPath);
+    const { pidPath } = daemonPaths(config);
+    await mkdir(dirname(pidPath), { recursive: true });
+
+    dummy = spawn(process.execPath, [
+      "-e",
+      [
+        "const http = require('node:http');",
+        "const server = http.createServer((req, res) => {",
+        "  if (req.url === '/health') {",
+        "    res.writeHead(200, { 'content-type': 'application/json' });",
+        "    res.end(JSON.stringify({ ok: true, adapter: 'tokenpilot-codex' }));",
+        "    return;",
+        "  }",
+        "  res.writeHead(404);",
+        "  res.end('not found');",
+        "});",
+        "server.listen(17680, '127.0.0.1');",
+        "setInterval(() => {}, 1000);",
+      ].join(" "),
+    ], {
+      stdio: "ignore",
+    });
+    await writeFile(pidPath, `${dummy.pid}\n`, "utf8");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await writeFile(codexConfigPath, [
+      "model_provider = \"OPENAI\"",
+      "",
+      "[model_providers.OPENAI]",
+      "name = \"OpenAI\"",
+      "base_url = \"https://api.openai.com/v1\"",
+      "wire_api = \"responses\"",
+      "requires_openai_auth = true",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await installCodexTokenPilot({
+      codexConfigPath,
+      hooksConfigPath,
+      tokenPilotConfigPath,
+      probeMcp: false,
+    });
+
+    const persisted = await loadTokenPilotCodexConfig(tokenPilotConfigPath);
+    assert.equal(persisted.proxyPort, 17680);
+    assert.equal(result.baseUrl, "http://127.0.0.1:17680/v1");
+    assert.equal((await readDaemonStatus(persisted)).running, false);
+  } finally {
+    if (dummy?.pid) {
+      try {
+        process.kill(dummy.pid, "SIGKILL");
+      } catch {
+        // The installer is expected to stop this process.
+      }
+    }
     await rm(dir, { recursive: true, force: true });
   }
 });
