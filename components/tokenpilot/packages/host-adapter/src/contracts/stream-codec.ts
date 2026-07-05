@@ -7,5 +7,6 @@ export type HostStreamCodec = {
 export type HostStreamSnapshot = {
   assistantText: string;
   usage?: Record<string, unknown>;
+  promptCacheKey?: string;
   rawStreamText: string;
 };
