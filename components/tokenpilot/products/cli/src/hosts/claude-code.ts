@@ -36,6 +36,7 @@ import {
   resolvePreferredSessionId,
 } from "./shared.js";
 import { handleStandaloneVisualCommandWithSelection } from "./visual.js";
+import type { CliHostPathOverrides } from "./factory.js";
 
 const CLAUDE_REDUCTION_PASS_NAMES = [
   "readStateCompaction",
@@ -45,21 +46,36 @@ const CLAUDE_REDUCTION_PASS_NAMES = [
   "agentsStartupOptimization",
 ] as const;
 
-async function loadConfig(): Promise<Record<string, unknown>> {
-  return loadTokenPilotClaudeCodeConfig(defaultTokenPilotClaudeCodeConfigPath()) as unknown as Record<string, unknown>;
+function resolveClaudeCodePaths(pathOverrides?: CliHostPathOverrides): {
+  tokenPilotConfigPath: string;
+  settingsPath: string;
+  mcpConfigPath: string;
+} {
+  return {
+    tokenPilotConfigPath: pathOverrides?.tokenPilotConfigPath?.trim() || defaultTokenPilotClaudeCodeConfigPath(),
+    settingsPath: pathOverrides?.hostConfigPath?.trim() || defaultClaudeCodeSettingsPath(),
+    mcpConfigPath: pathOverrides?.hostAuxConfigPath?.trim() || defaultClaudeCodeMcpConfigPath(),
+  };
 }
 
-async function writeConfig(nextConfig: Record<string, unknown>): Promise<void> {
-  await mkdir(dirname(defaultTokenPilotClaudeCodeConfigPath()), { recursive: true });
+async function loadConfig(pathOverrides?: CliHostPathOverrides): Promise<Record<string, unknown>> {
+  return loadTokenPilotClaudeCodeConfig(resolveClaudeCodePaths(pathOverrides).tokenPilotConfigPath) as unknown as Record<string, unknown>;
+}
+
+async function writeConfig(nextConfig: Record<string, unknown>, pathOverrides?: CliHostPathOverrides): Promise<void> {
+  const { tokenPilotConfigPath } = resolveClaudeCodePaths(pathOverrides);
+  await mkdir(dirname(tokenPilotConfigPath), { recursive: true });
   await writeTokenPilotClaudeCodeConfig(
-    normalizeTokenPilotClaudeCodeConfig(nextConfig),
-    defaultTokenPilotClaudeCodeConfigPath(),
+    normalizeTokenPilotClaudeCodeConfig(nextConfig, { configPath: tokenPilotConfigPath }),
+    tokenPilotConfigPath,
   );
 }
 
-async function maybeResolveLatestSessionId(): Promise<string | undefined> {
+async function maybeResolveLatestSessionId(pathOverrides?: CliHostPathOverrides): Promise<string | undefined> {
   return resolveConfiguredPreferredSessionId({
-    loadConfig,
+    loadConfig() {
+      return loadConfig(pathOverrides);
+    },
     resolveStateDir: resolveClaudeCodeStateDir,
     resolveLatestSessionId: resolveLatestClaudeCodeSessionId,
     readLatestUxEffect,
@@ -80,14 +96,10 @@ function formatClaudeCodeStatus(currentConfig: Record<string, unknown>): string 
   ].join("\n");
 }
 
-async function applyClaudeCodeMode(mode: "conservative" | "normal"): Promise<void> {
-  const current = await loadConfig();
-  await writeConfig(applyStandardRuntimeModeConfig(current, mode));
-}
-
 export function createClaudeCodeCliBridge(target: {
   host: "claude-code";
   sessionId?: string;
+  pathOverrides?: CliHostPathOverrides;
 }): {
   bridge: TokenPilotProductSurfaceHostBridge;
   configAdapter: TokenPilotProductSurfaceConfigAdapter;
@@ -95,16 +107,21 @@ export function createClaudeCodeCliBridge(target: {
   resolveSessionId(sessionId?: string): Promise<string | undefined>;
   handleCommand(ctx: { args: string; sessionId?: string }): Promise<{ text: string }>;
 } {
+  const paths = resolveClaudeCodePaths(target.pathOverrides);
   const bridge: TokenPilotProductSurfaceHostBridge = {
-    loadConfig,
-    writeConfig,
+    loadConfig() {
+      return loadConfig(target.pathOverrides);
+    },
+    writeConfig(nextConfig) {
+      return writeConfig(nextConfig, target.pathOverrides);
+    },
     async handleDoctor(currentConfig) {
       const config = currentConfig as any;
       const report = await inspectClaudeCodeDoctor({
         config,
-        settingsPath: defaultClaudeCodeSettingsPath(),
-        tokenPilotConfigPath: defaultTokenPilotClaudeCodeConfigPath(),
-        mcpConfigPath: defaultClaudeCodeMcpConfigPath(),
+        settingsPath: paths.settingsPath,
+        tokenPilotConfigPath: paths.tokenPilotConfigPath,
+        mcpConfigPath: paths.mcpConfigPath,
       });
       return {
         text: formatClaudeCodeDoctorReport(report),
@@ -144,15 +161,22 @@ export function createClaudeCodeCliBridge(target: {
     reductionPassNames: CLAUDE_REDUCTION_PASS_NAMES,
     bridge,
     configAdapter: claudeCodeProductSurfaceConfigAdapter,
-    loadConfig,
+    loadConfig() {
+      return loadConfig(target.pathOverrides);
+    },
     formatStatus: formatClaudeCodeStatus,
-    applyMode: applyClaudeCodeMode,
+    async applyMode(mode) {
+      const current = await loadConfig(target.pathOverrides);
+      await writeConfig(applyStandardRuntimeModeConfig(current, mode), target.pathOverrides);
+    },
   });
 
   return {
     bridge,
     configAdapter: claudeCodeProductSurfaceConfigAdapter,
-    maybeResolveLatestSessionId,
+    maybeResolveLatestSessionId() {
+      return maybeResolveLatestSessionId(target.pathOverrides);
+    },
     async resolveSessionId(sessionId?: string): Promise<string | undefined> {
       const text = typeof sessionId === "string" ? sessionId.trim() : "";
       return text || undefined;

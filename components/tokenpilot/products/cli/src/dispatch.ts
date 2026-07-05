@@ -3,6 +3,7 @@ import {
   readCliContextState,
   updateCliContextState,
 } from "./context-store.js";
+import type { CliHostPathOverrides } from "./hosts/factory.js";
 import { CLI_HOSTS, parseCliHostId, type CliHostId } from "./hosts/registry.js";
 import { createCliHostRuntime } from "./hosts/factory.js";
 import { handleStandaloneVisualCommandWithSelection } from "./hosts/visual.js";
@@ -11,10 +12,35 @@ import { formatCliUsage } from "./usage.js";
 type HostTarget = {
   host: CliHostId;
   sessionId?: string;
+  pathOverrides?: CliHostPathOverrides;
 };
+
+function currentEnvPathOverrides(host: CliHostId): CliHostPathOverrides | undefined {
+  if (host === "codex") {
+    const tokenPilotConfigPath = process.env.TOKENPILOT_CODEX_CONFIG?.trim();
+    const hostConfigPath = process.env.CODEX_CONFIG_PATH?.trim();
+    const hostAuxConfigPath = process.env.CODEX_HOOKS_CONFIG_PATH?.trim();
+    return tokenPilotConfigPath || hostConfigPath || hostAuxConfigPath
+      ? { tokenPilotConfigPath, hostConfigPath, hostAuxConfigPath }
+      : undefined;
+  }
+  if (host === "claude-code") {
+    const tokenPilotConfigPath = process.env.TOKENPILOT_CLAUDE_CODE_CONFIG?.trim();
+    const hostConfigPath = process.env.CLAUDE_CODE_SETTINGS_PATH?.trim();
+    const hostAuxConfigPath = process.env.CLAUDE_CODE_MCP_CONFIG_PATH?.trim();
+    return tokenPilotConfigPath || hostConfigPath || hostAuxConfigPath
+      ? { tokenPilotConfigPath, hostConfigPath, hostAuxConfigPath }
+      : undefined;
+  }
+  return undefined;
+}
 
 function parseBooleanContextCommand(args: string[]): boolean {
   return args.length === 1 && args[0] === "context";
+}
+
+async function resolvePathOverrides(host: CliHostId): Promise<CliHostPathOverrides | undefined> {
+  return currentEnvPathOverrides(host) ?? (await readCliContextState()).configPathsByHost?.[host];
 }
 
 async function resolveDefaultTarget(): Promise<HostTarget | undefined> {
@@ -22,7 +48,8 @@ async function resolveDefaultTarget(): Promise<HostTarget | undefined> {
   const host = state.lastActiveHost;
   if (!host) return undefined;
   const sessionId = state.lastSessionByHost?.[host];
-  return { host, sessionId };
+  const pathOverrides = state.configPathsByHost?.[host];
+  return { host, sessionId, pathOverrides };
 }
 
 async function resolveTarget(argv: string[]): Promise<{
@@ -51,12 +78,16 @@ async function resolveTarget(argv: string[]): Promise<{
       if (!sessionId) {
         return { commandArgs: [], handledText: "Missing session id." };
       }
-      const runtime = createCliHostRuntime({ host, sessionId });
+      const runtime = createCliHostRuntime({
+        host,
+        sessionId,
+        pathOverrides: await resolvePathOverrides(host),
+      });
       sessionId = (await runtime.resolveSessionId(sessionId)) ?? sessionId;
-      await updateCliContextState({ host, sessionId });
+      await updateCliContextState({ host, sessionId, pathOverrides: await resolvePathOverrides(host) });
       return { commandArgs: [], handledText: `Default context = ${host} / ${sessionId}` };
     }
-    await updateCliContextState({ host });
+    await updateCliContextState({ host, pathOverrides: await resolvePathOverrides(host) });
     return { commandArgs: [], handledText: `Default host = ${host}` };
   }
 
@@ -66,12 +97,16 @@ async function resolveTarget(argv: string[]): Promise<{
       const sessionId = String(argv[2] ?? "").trim();
       const commandArgs = argv.slice(3);
       return {
-        target: { host: explicitHost, sessionId: sessionId || undefined },
+        target: {
+          host: explicitHost,
+          sessionId: sessionId || undefined,
+          pathOverrides: await resolvePathOverrides(explicitHost),
+        },
         commandArgs,
       };
     }
     return {
-      target: { host: explicitHost },
+      target: { host: explicitHost, pathOverrides: await resolvePathOverrides(explicitHost) },
       commandArgs: argv.slice(1),
     };
   }
@@ -114,6 +149,7 @@ export async function dispatchCli(argv: string[]): Promise<TokenPilotProductComm
   const runtime = createCliHostRuntime({
     host: target.host,
     sessionId: target.sessionId,
+    pathOverrides: await resolvePathOverrides(target.host) ?? target.pathOverrides,
   });
   const result = await runtime.handleCommand({
     args: commandArgs.join(" "),
@@ -126,6 +162,7 @@ export async function dispatchCli(argv: string[]): Promise<TokenPilotProductComm
   await updateCliContextState({
     host: target.host,
     sessionId: resolvedSessionId,
+    pathOverrides: await resolvePathOverrides(target.host) ?? target.pathOverrides,
   });
   return result;
 }

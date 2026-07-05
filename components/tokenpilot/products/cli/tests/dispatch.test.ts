@@ -63,6 +63,58 @@ test("dispatch routes codex host commands through the shared CLI bridge", async 
   }
 });
 
+test("dispatch remembers custom codex config paths for later host commands without env vars", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lightmem2-cli-codex-custom-path-memory-"));
+  const originalHome = process.env.HOME;
+  const originalCodexConfigPath = process.env.CODEX_CONFIG_PATH;
+  const originalHooksConfigPath = process.env.CODEX_HOOKS_CONFIG_PATH;
+  const originalTokenPilotConfigPath = process.env.TOKENPILOT_CODEX_CONFIG;
+  process.env.HOME = join(dir, "real-home");
+  process.env.CODEX_CONFIG_PATH = join(dir, "isolated", "config.toml");
+  process.env.CODEX_HOOKS_CONFIG_PATH = join(dir, "isolated", "hooks.json");
+  process.env.TOKENPILOT_CODEX_CONFIG = join(dir, "isolated", "tokenpilot.json");
+  try {
+    await mkdir(join(dir, "isolated"), { recursive: true });
+    await writeFile(
+      process.env.CODEX_CONFIG_PATH!,
+      [
+        "model_provider = \"OPENAI\"",
+        "",
+        "[model_providers.OPENAI]",
+        "name = \"OPENAI\"",
+        "base_url = \"http://127.0.0.1:19999/v1\"",
+        "wire_api = \"responses\"",
+        "requires_openai_auth = true",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeFile(process.env.CODEX_HOOKS_CONFIG_PATH!, JSON.stringify({ hooks: {} }, null, 2), "utf8");
+
+    const first = await dispatchCli(["codex", "doctor"]);
+    assert.match(first.text, new RegExp(process.env.CODEX_CONFIG_PATH!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    delete process.env.CODEX_CONFIG_PATH;
+    delete process.env.CODEX_HOOKS_CONFIG_PATH;
+    delete process.env.TOKENPILOT_CODEX_CONFIG;
+
+    const second = await dispatchCli(["codex", "doctor"]);
+    assert.match(second.text, new RegExp(join(dir, "isolated", "config.toml").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(second.text, new RegExp(join(dir, "isolated", "tokenpilot.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(second.text, new RegExp(join(dir, "isolated", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  } finally {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalCodexConfigPath === undefined) delete process.env.CODEX_CONFIG_PATH;
+    else process.env.CODEX_CONFIG_PATH = originalCodexConfigPath;
+    if (originalHooksConfigPath === undefined) delete process.env.CODEX_HOOKS_CONFIG_PATH;
+    else process.env.CODEX_HOOKS_CONFIG_PATH = originalHooksConfigPath;
+    if (originalTokenPilotConfigPath === undefined) delete process.env.TOKENPILOT_CODEX_CONFIG;
+    else process.env.TOKENPILOT_CODEX_CONFIG = originalTokenPilotConfigPath;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("dispatch routes claude-code host commands through the shared CLI bridge", async () => {
   const dir = await mkdtemp(join(tmpdir(), "lightmem2-cli-claude-code-"));
   const originalHome = process.env.HOME;
@@ -86,6 +138,45 @@ test("dispatch routes claude-code host commands through the shared CLI bridge", 
     } else {
       process.env.HOME = originalHome;
     }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("dispatch remembers custom claude-code config paths for later host commands without env vars", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lightmem2-cli-claude-custom-path-memory-"));
+  const originalHome = process.env.HOME;
+  const originalSettingsPath = process.env.CLAUDE_CODE_SETTINGS_PATH;
+  const originalMcpConfigPath = process.env.CLAUDE_CODE_MCP_CONFIG_PATH;
+  const originalTokenPilotConfigPath = process.env.TOKENPILOT_CLAUDE_CODE_CONFIG;
+  process.env.HOME = join(dir, "real-home");
+  process.env.CLAUDE_CODE_SETTINGS_PATH = join(dir, "isolated", "settings.json");
+  process.env.CLAUDE_CODE_MCP_CONFIG_PATH = join(dir, "isolated", ".claude.json");
+  process.env.TOKENPILOT_CLAUDE_CODE_CONFIG = join(dir, "isolated", "tokenpilot.json");
+  try {
+    await mkdir(join(dir, "isolated"), { recursive: true });
+    await writeFile(process.env.CLAUDE_CODE_SETTINGS_PATH!, JSON.stringify({ env: {}, hooks: {} }, null, 2), "utf8");
+    await writeFile(process.env.CLAUDE_CODE_MCP_CONFIG_PATH!, JSON.stringify({ mcpServers: {} }, null, 2), "utf8");
+
+    const first = await dispatchCli(["claude-code", "doctor"]);
+    assert.match(first.text, new RegExp(process.env.CLAUDE_CODE_SETTINGS_PATH!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    delete process.env.CLAUDE_CODE_SETTINGS_PATH;
+    delete process.env.CLAUDE_CODE_MCP_CONFIG_PATH;
+    delete process.env.TOKENPILOT_CLAUDE_CODE_CONFIG;
+
+    const second = await dispatchCli(["claude-code", "doctor"]);
+    assert.match(second.text, new RegExp(join(dir, "isolated", "settings.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(second.text, new RegExp(join(dir, "isolated", ".claude.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(second.text, new RegExp(join(dir, "isolated", "tokenpilot.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  } finally {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalSettingsPath === undefined) delete process.env.CLAUDE_CODE_SETTINGS_PATH;
+    else process.env.CLAUDE_CODE_SETTINGS_PATH = originalSettingsPath;
+    if (originalMcpConfigPath === undefined) delete process.env.CLAUDE_CODE_MCP_CONFIG_PATH;
+    else process.env.CLAUDE_CODE_MCP_CONFIG_PATH = originalMcpConfigPath;
+    if (originalTokenPilotConfigPath === undefined) delete process.env.TOKENPILOT_CLAUDE_CODE_CONFIG;
+    else process.env.TOKENPILOT_CLAUDE_CODE_CONFIG = originalTokenPilotConfigPath;
     await rm(dir, { recursive: true, force: true });
   }
 });

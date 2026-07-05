@@ -17,7 +17,6 @@ import {
   defaultTokenPilotConfigPath,
   loadTokenPilotCodexConfig,
   normalizeTokenPilotCodexConfig,
-  resolvedCodexConfigPath,
   writeTokenPilotCodexConfig,
 } from "../../../../adapters/codex/src/config.js";
 import { inspectCodexDoctor, formatCodexDoctorReport } from "../../../../adapters/codex/src/doctor.js";
@@ -37,6 +36,7 @@ import {
   resolvePreferredSessionId,
 } from "./shared.js";
 import { handleStandaloneVisualCommandWithSelection } from "./visual.js";
+import type { CliHostPathOverrides } from "./factory.js";
 
 const CODEX_REDUCTION_PASS_NAMES = [
   "readStateCompaction",
@@ -46,21 +46,36 @@ const CODEX_REDUCTION_PASS_NAMES = [
   "agentsStartupOptimization",
 ] as const;
 
-async function loadConfig(): Promise<Record<string, unknown>> {
-  return loadTokenPilotCodexConfig(defaultTokenPilotConfigPath()) as unknown as Record<string, unknown>;
+function resolveCodexPaths(pathOverrides?: CliHostPathOverrides): {
+  tokenPilotConfigPath: string;
+  codexConfigPath: string;
+  hooksConfigPath: string;
+} {
+  return {
+    tokenPilotConfigPath: pathOverrides?.tokenPilotConfigPath?.trim() || defaultTokenPilotConfigPath(),
+    codexConfigPath: pathOverrides?.hostConfigPath?.trim() || process.env.CODEX_CONFIG_PATH?.trim() || defaultCodexConfigPath(),
+    hooksConfigPath: pathOverrides?.hostAuxConfigPath?.trim() || defaultHooksConfigPath(),
+  };
 }
 
-async function writeConfig(nextConfig: Record<string, unknown>): Promise<void> {
-  await mkdir(dirname(defaultTokenPilotConfigPath()), { recursive: true });
+async function loadConfig(pathOverrides?: CliHostPathOverrides): Promise<Record<string, unknown>> {
+  return loadTokenPilotCodexConfig(resolveCodexPaths(pathOverrides).tokenPilotConfigPath) as unknown as Record<string, unknown>;
+}
+
+async function writeConfig(nextConfig: Record<string, unknown>, pathOverrides?: CliHostPathOverrides): Promise<void> {
+  const { tokenPilotConfigPath } = resolveCodexPaths(pathOverrides);
+  await mkdir(dirname(tokenPilotConfigPath), { recursive: true });
   await writeTokenPilotCodexConfig(
-    normalizeTokenPilotCodexConfig(nextConfig),
-    defaultTokenPilotConfigPath(),
+    normalizeTokenPilotCodexConfig(nextConfig, { configPath: tokenPilotConfigPath }),
+    tokenPilotConfigPath,
   );
 }
 
-async function maybeResolveLatestSessionId(): Promise<string | undefined> {
+async function maybeResolveLatestSessionId(pathOverrides?: CliHostPathOverrides): Promise<string | undefined> {
   return resolveConfiguredPreferredSessionId({
-    loadConfig,
+    loadConfig() {
+      return loadConfig(pathOverrides);
+    },
     resolveStateDir: resolveCodexStateDir,
     resolveLatestSessionId: resolveLatestCodexSessionId,
     readLatestUxEffect,
@@ -98,14 +113,10 @@ function formatCodexStatus(currentConfig: Record<string, unknown>): string {
   ].join("\n");
 }
 
-async function applyCodexMode(mode: "conservative" | "normal"): Promise<void> {
-  const current = await loadConfig();
-  await writeConfig(applyStandardRuntimeModeConfig(current, mode));
-}
-
 export function createCodexCliBridge(target: {
   host: "codex";
   sessionId?: string;
+  pathOverrides?: CliHostPathOverrides;
 }): {
   bridge: TokenPilotProductSurfaceHostBridge;
   configAdapter: TokenPilotProductSurfaceConfigAdapter;
@@ -113,16 +124,21 @@ export function createCodexCliBridge(target: {
   resolveSessionId(sessionId?: string): Promise<string | undefined>;
   handleCommand(ctx: { args: string; sessionId?: string }): Promise<{ text: string }>;
 } {
+  const paths = resolveCodexPaths(target.pathOverrides);
   const bridge: TokenPilotProductSurfaceHostBridge = {
-    loadConfig,
-    writeConfig,
+    loadConfig() {
+      return loadConfig(target.pathOverrides);
+    },
+    writeConfig(nextConfig) {
+      return writeConfig(nextConfig, target.pathOverrides);
+    },
     async handleDoctor(currentConfig) {
       const config = currentConfig as any;
       const report = await inspectCodexDoctor({
         config,
-        configPath: resolvedCodexConfigPath(),
-        tokenPilotConfigPath: defaultTokenPilotConfigPath(),
-        hooksConfigPath: defaultHooksConfigPath(),
+        configPath: paths.codexConfigPath,
+        tokenPilotConfigPath: paths.tokenPilotConfigPath,
+        hooksConfigPath: paths.hooksConfigPath,
       });
       return {
         text: formatCodexDoctorReport(report),
@@ -164,18 +180,25 @@ export function createCodexCliBridge(target: {
     reductionPassNames: CODEX_REDUCTION_PASS_NAMES,
     bridge,
     configAdapter: codexProductSurfaceConfigAdapter,
-    loadConfig,
+    loadConfig() {
+      return loadConfig(target.pathOverrides);
+    },
     formatStatus: formatCodexStatus,
-    applyMode: applyCodexMode,
+    async applyMode(mode) {
+      const current = await loadConfig(target.pathOverrides);
+      await writeConfig(applyStandardRuntimeModeConfig(current, mode), target.pathOverrides);
+    },
   });
 
   return {
     bridge,
     configAdapter: codexProductSurfaceConfigAdapter,
-    maybeResolveLatestSessionId,
+    maybeResolveLatestSessionId() {
+      return maybeResolveLatestSessionId(target.pathOverrides);
+    },
     async resolveSessionId(sessionId?: string): Promise<string | undefined> {
       return resolveCodexCliSessionId({
-        currentConfig: await loadConfig(),
+        currentConfig: await loadConfig(target.pathOverrides),
         explicitSessionId: sessionId,
       });
     },

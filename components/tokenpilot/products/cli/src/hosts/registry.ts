@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { readCliHostPathOverrides } from "../context-store.js";
 import type { VisualHostSource } from "@tokenpilot/product-surface";
 import {
   defaultTokenPilotClaudeCodeConfigPath,
@@ -42,6 +43,22 @@ export function parseCliHostId(value: string | undefined): CliHostId | undefined
   return undefined;
 }
 
+async function resolveCodexTokenPilotConfigPath(): Promise<string> {
+  return (
+    process.env.TOKENPILOT_CODEX_CONFIG?.trim()
+    || (await readCliHostPathOverrides("codex"))?.tokenPilotConfigPath?.trim()
+    || defaultTokenPilotConfigPath()
+  );
+}
+
+async function resolveClaudeCodeTokenPilotConfigPath(): Promise<string> {
+  return (
+    process.env.TOKENPILOT_CLAUDE_CODE_CONFIG?.trim()
+    || (await readCliHostPathOverrides("claude-code"))?.tokenPilotConfigPath?.trim()
+    || defaultTokenPilotClaudeCodeConfigPath()
+  );
+}
+
 async function readOpenClawConfig(): Promise<Record<string, unknown>> {
   const configPath = resolveOpenClawConfigPath();
   try {
@@ -65,7 +82,7 @@ const CLI_VISUAL_HOST_DEFINITIONS: CliVisualHostDefinition[] = [
     hostId: "codex",
     displayName: "Codex",
     async resolveStateDir(): Promise<string | undefined> {
-      const codexConfig = await loadTokenPilotCodexConfig(defaultTokenPilotConfigPath());
+      const codexConfig = await loadTokenPilotCodexConfig(await resolveCodexTokenPilotConfigPath());
       return typeof codexConfig.stateDir === "string" ? codexConfig.stateDir : undefined;
     },
   },
@@ -73,7 +90,7 @@ const CLI_VISUAL_HOST_DEFINITIONS: CliVisualHostDefinition[] = [
     hostId: "claude-code",
     displayName: "Claude Code",
     async resolveStateDir(): Promise<string | undefined> {
-      const claudeConfig = await loadTokenPilotClaudeCodeConfig(defaultTokenPilotClaudeCodeConfigPath());
+      const claudeConfig = await loadTokenPilotClaudeCodeConfig(await resolveClaudeCodeTokenPilotConfigPath());
       return typeof claudeConfig.stateDir === "string" ? claudeConfig.stateDir : undefined;
     },
   },

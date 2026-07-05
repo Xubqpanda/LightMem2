@@ -10,9 +10,16 @@ export type CliHostRuntime = {
   resolveSessionId(sessionId?: string): Promise<string | undefined>;
 };
 
+export type CliHostPathOverrides = {
+  tokenPilotConfigPath?: string;
+  hostConfigPath?: string;
+  hostAuxConfigPath?: string;
+};
+
 type CliHostRuntimeFactory = (target: {
   host: CliHostId;
   sessionId?: string;
+  pathOverrides?: CliHostPathOverrides;
 }) => CliHostRuntime;
 
 const CLI_HOST_RUNTIME_FACTORIES: Record<CliHostId, CliHostRuntimeFactory> = {
@@ -20,12 +27,14 @@ const CLI_HOST_RUNTIME_FACTORIES: Record<CliHostId, CliHostRuntimeFactory> = {
     return createCodexCliBridge({
       host: "codex",
       sessionId: target.sessionId,
+      pathOverrides: target.pathOverrides,
     });
   },
   "claude-code"(target) {
     const bridge = createClaudeCodeCliBridge({
       host: "claude-code",
       sessionId: target.sessionId,
+      pathOverrides: target.pathOverrides,
     });
     return {
       ...bridge,
@@ -58,6 +67,7 @@ const CLI_HOST_RUNTIME_FACTORIES: Record<CliHostId, CliHostRuntimeFactory> = {
 export function createCliHostRuntime(target: {
   host: CliHostId;
   sessionId?: string;
+  pathOverrides?: CliHostPathOverrides;
 }): CliHostRuntime {
   return CLI_HOST_RUNTIME_FACTORIES[target.host](target);
 }
