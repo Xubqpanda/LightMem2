@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 
@@ -42,8 +42,33 @@ async function readJsonMeta<TMeta>(metaPath: string): Promise<TMeta | undefined>
 }
 
 export function resolveCliEntryPathFromHostModule(hostModulePath: string): string {
-  const extension = extname(hostModulePath) || ".js";
-  return join(dirname(dirname(hostModulePath)), `cli${extension}`);
+  const normalizedPath = String(hostModulePath || "").trim();
+  if (!normalizedPath) {
+    throw new Error("Unable to resolve CLI entry from an empty host module path");
+  }
+
+  const directDistCli = join(dirname(normalizedPath), "cli.js");
+  if (basename(normalizedPath) === "cli.js" && existsSync(normalizedPath)) {
+    return normalizedPath;
+  }
+  if (basename(normalizedPath) === "cli.ts" && directDistCli !== normalizedPath && existsSync(directDistCli)) {
+    return directDistCli;
+  }
+
+  let current = dirname(normalizedPath);
+  for (let i = 0; i < 8; i += 1) {
+    const distCliPath = join(current, "dist", "cli.js");
+    if (existsSync(distCliPath)) return distCliPath;
+
+    const siblingCliPath = join(current, "cli.js");
+    if (existsSync(siblingCliPath)) return siblingCliPath;
+
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  throw new Error(`Unable to resolve CLI entry from ${hostModulePath}`);
 }
 
 export function sharedVisualRootDir(): string {
