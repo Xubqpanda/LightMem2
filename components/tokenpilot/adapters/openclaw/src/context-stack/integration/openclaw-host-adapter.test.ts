@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { prepareBeforeCall } from "@tokenpilot/host-adapter";
 
 import {
   createOpenClawPayloadCodec,
@@ -78,6 +79,40 @@ test("openclaw payload codec decodes and re-encodes request envelope", () => {
   assert.equal(encoded.prompt_cache_key, "runtime-pfx-next");
   assert.equal(encoded.prompt_cache_retention, "12h");
   assert.equal(encoded.previous_response_id, "resp-next");
+});
+
+test("openclaw request path canonicalizes tools before encode", async () => {
+  const sessionResolver = createOpenClawSessionResolver({
+    resolveSessionIdForPayload: () => "session-tools",
+    extractInputText: () => "",
+  });
+  const codec = createOpenClawPayloadCodec(
+    {
+      resolveSessionIdForPayload: () => "session-tools",
+      extractInputText: () => "",
+    },
+    sessionResolver,
+  );
+
+  const decoded = codec.decodeRequest({
+    model: "tokenpilot/gpt-5.4-mini",
+    stream: false,
+    instructions: "developer instructions",
+    input: [{ role: "user", content: "hello" }],
+    tools: [
+      { type: "function", function: { name: "z_tool", parameters: { z: 1, a: 2 } } },
+      { type: "function", function: { name: "a_tool", parameters: { b: true, a: false } } },
+    ],
+  });
+
+  const prepared = await prepareBeforeCall({ envelope: decoded, config: { mode: "normal" } });
+  const encoded = codec.encodeRequest(prepared.envelope) as any;
+
+  assert.equal(Array.isArray(encoded.tools), true);
+  assert.equal(encoded.tools[0]?.function?.name, "a_tool");
+  assert.equal(encoded.tools[1]?.function?.name, "z_tool");
+  assert.deepEqual(encoded.tools[0]?.function?.parameters, { a: false, b: true });
+  assert.deepEqual(encoded.tools[1]?.function?.parameters, { a: 2, z: 1 });
 });
 
 test("openclaw payload codec removes cleared request metadata on encode", () => {

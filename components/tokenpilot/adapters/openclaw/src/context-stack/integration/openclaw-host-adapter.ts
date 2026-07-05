@@ -201,6 +201,25 @@ export function createOpenClawStreamCodec(deps: {
     collectAssistantText(rawStreamText: string): string {
       return deps.extractProviderResponseText(rawStreamText, null, deps.contentToText);
     },
+    extractUsage(rawStreamText: string): Record<string, unknown> | undefined {
+      let usage: Record<string, unknown> | undefined;
+      for (const line of String(rawStreamText ?? "").split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payloadText = trimmed.slice(5).trim();
+        if (!payloadText || payloadText === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(payloadText) as Record<string, unknown>;
+          const candidate = parsed?.usage;
+          if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+            usage = candidate as Record<string, unknown>;
+          }
+        } catch {
+          // ignore malformed stream frames
+        }
+      }
+      return usage;
+    },
   };
 }
 
@@ -208,9 +227,31 @@ export function createOpenClawStreamSnapshot(
   rawStreamText: string,
   codec: HostStreamCodec,
 ): HostStreamSnapshot {
+  let promptCacheKey: string | undefined;
+  for (const line of String(rawStreamText ?? "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payloadText = trimmed.slice(5).trim();
+    if (!payloadText || payloadText === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(payloadText) as Record<string, unknown>;
+      if (typeof parsed?.prompt_cache_key === "string") {
+        promptCacheKey = parsed.prompt_cache_key;
+      } else if (
+        parsed?.response
+        && typeof parsed.response === "object"
+        && typeof (parsed.response as Record<string, unknown>).prompt_cache_key === "string"
+      ) {
+        promptCacheKey = String((parsed.response as Record<string, unknown>).prompt_cache_key);
+      }
+    } catch {
+      // ignore malformed stream frames
+    }
+  }
   return {
     rawStreamText,
     assistantText: codec.collectAssistantText(rawStreamText),
     usage: codec.extractUsage?.(rawStreamText),
+    promptCacheKey,
   };
 }

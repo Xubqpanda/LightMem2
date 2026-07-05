@@ -4,6 +4,7 @@ import { createOpenClawHostBridge } from "./openclaw-host-bridge.js";
 import { applyProxyAfterCallReduction, recordNonStreamingUxEffect } from "./proxy-runtime-postprocess.js";
 import { recordStreamingUxEffect } from "./proxy-runtime-stream.js";
 import { recordProxyForwarding, recordProxyResponse } from "./proxy-runtime-logging.js";
+import { appendOpenClawCacheAuditRecord } from "../../cache-audit.js";
 
 export async function handleStreamingProxyResponse(args: {
   cfg: any;
@@ -23,6 +24,7 @@ export async function handleStreamingProxyResponse(args: {
   beforeReductionCanonicalInput: string;
   afterReductionCanonicalInput: string;
   reductionApplied: any;
+  cacheAuditSnapshot?: Omit<import("../../cache-audit.js").OpenClawCacheAuditRecord, "at" | "responsePromptCacheKey" | "cachedInputTokens" | "usage" | "status">;
 }): Promise<void> {
   const {
     cfg,
@@ -40,6 +42,7 @@ export async function handleStreamingProxyResponse(args: {
     beforeReductionCanonicalInput,
     afterReductionCanonicalInput,
     reductionApplied,
+    cacheAuditSnapshot,
   } = args;
   const upstreamStreamResp = await helpers.requestUpstreamResponsesStream(upstream, activePayload, logger, cfg.stateDir);
   if (cfg.stateDir) {
@@ -99,6 +102,16 @@ export async function handleStreamingProxyResponse(args: {
       streamChunks,
       reductionApplied,
     });
+    const streamSnapshot = createOpenClawHostBridge(helpers).snapshotStream(Buffer.concat(streamChunks).toString("utf8"));
+    if (cfg.stateDir && cacheAuditSnapshot) {
+      await appendOpenClawCacheAuditRecord({
+        stateDir: cfg.stateDir,
+        snapshot: cacheAuditSnapshot,
+        responsePromptCacheKey: streamSnapshot.promptCacheKey ?? null,
+        usage: streamSnapshot.usage ?? null,
+        status: upstreamStreamResp.status,
+      });
+    }
   } else if (cfg.stateDir && responseClosed && !responseFinished) {
     await helpers.appendTaskStateTrace(cfg.stateDir, {
       stage: "proxy_stream_ux_skipped",
@@ -133,6 +146,7 @@ export async function handleNonStreamingProxyResponse(args: {
   reductionPassOptions: any;
   reductionMaxToolChars: number;
   reductionTriggerMinChars: number;
+  cacheAuditSnapshot?: Omit<import("../../cache-audit.js").OpenClawCacheAuditRecord, "at" | "responsePromptCacheKey" | "cachedInputTokens" | "usage" | "status">;
 }): Promise<void> {
   const {
     cfg,
@@ -155,6 +169,7 @@ export async function handleNonStreamingProxyResponse(args: {
     reductionPassOptions,
     reductionMaxToolChars,
     reductionTriggerMinChars,
+    cacheAuditSnapshot,
   } = args;
   const hostBridge = createOpenClawHostBridge(helpers);
   const responseCodec = payloadCodec ?? hostBridge.payloadCodec;
@@ -223,6 +238,25 @@ export async function handleNonStreamingProxyResponse(args: {
     afterCallReduction,
     memoryFaultAutoReplayCount,
   });
+  if (cfg.stateDir && cacheAuditSnapshot) {
+    await appendOpenClawCacheAuditRecord({
+      stateDir: cfg.stateDir,
+      snapshot: cacheAuditSnapshot,
+      responsePromptCacheKey:
+        typeof responseEnvelope?.metadata?.promptCacheKey === "string"
+          ? responseEnvelope.metadata.promptCacheKey
+          : typeof parsedResponseForMirror?.prompt_cache_key === "string"
+            ? parsedResponseForMirror.prompt_cache_key
+            : null,
+      usage:
+        responseEnvelope?.usage && typeof responseEnvelope.usage === "object"
+          ? responseEnvelope.usage
+          : parsedResponseForMirror?.usage && typeof parsedResponseForMirror.usage === "object"
+            ? parsedResponseForMirror.usage
+            : null,
+      status: upstreamRespFinal.status,
+    });
+  }
   if (cfg.stateDir) {
     await recordNonStreamingUxEffect({
       cfg,

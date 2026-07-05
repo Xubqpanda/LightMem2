@@ -74,6 +74,7 @@ export async function startEmbeddedResponsesProxy(
           beforeReductionCanonicalInput: prepared.beforeReductionCanonicalInput,
           afterReductionCanonicalInput: prepared.afterReductionCanonicalInput,
           reductionApplied: prepared.reductionApplied,
+          cacheAuditSnapshot: prepared.cacheAuditSnapshot,
         });
         return;
       }
@@ -98,6 +99,7 @@ export async function startEmbeddedResponsesProxy(
         reductionPassOptions: prepared.reductionPassOptions,
         reductionMaxToolChars: prepared.reductionMaxToolChars,
         reductionTriggerMinChars: prepared.reductionTriggerMinChars,
+        cacheAuditSnapshot: prepared.cacheAuditSnapshot,
       });
     } catch (err) {
       res.statusCode = 500;

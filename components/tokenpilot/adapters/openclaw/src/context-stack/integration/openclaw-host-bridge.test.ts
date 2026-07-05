@@ -23,9 +23,16 @@ test("openclaw host bridge exposes request/response/stream host views", () => {
     stream: false,
     input: [{ role: "user", content: "hi" }],
   });
-  const stream = bridge.snapshotStream("data: hello\n\n");
+  const stream = bridge.snapshotStream([
+    'data: {"response":{"prompt_cache_key":"pk-stream-1"}}',
+    'data: {"usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":64}}}',
+    "data: hello",
+    "",
+  ].join("\n"));
 
   assert.equal(request.model, "tokenpilot/gpt-5.4-mini");
   assert.equal(response.metadata?.responseId, "resp-1");
   assert.equal(stream.assistantText, "hello");
+  assert.equal(stream.promptCacheKey, "pk-stream-1");
+  assert.equal(stream.usage?.input_tokens, 100);
 });

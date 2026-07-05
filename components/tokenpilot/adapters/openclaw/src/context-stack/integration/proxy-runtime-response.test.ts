@@ -165,7 +165,10 @@ test("handleNonStreamingProxyResponse forwards reduced JSON response and records
 test("handleStreamingProxyResponse forwards stream and records stream ux after finish", async () => {
   const recordedUx: any[] = [];
   const traces: any[] = [];
+  const cacheAuditRecords: any[] = [];
   const stream = Readable.from([
+    Buffer.from('data: {"response":{"prompt_cache_key":"pk-stream-2"}}\n\n'),
+    Buffer.from('data: {"usage":{"input_tokens":120,"input_tokens_details":{"cached_tokens":80}}}\n\n'),
     Buffer.from('data: {"type":"response.output_text.delta","delta":"Hello "}\n\n'),
     Buffer.from('data: {"type":"response.output_text.done","text":"Hello world"}\n\n'),
     Buffer.from("data: [DONE]\n\n"),
@@ -221,6 +224,16 @@ test("handleStreamingProxyResponse forwards stream and records stream ux after f
     beforeReductionCanonicalInput: "hello original canonical",
     afterReductionCanonicalInput: "hello reduced canonical",
     reductionApplied: { savedChars: 10 },
+    cacheAuditSnapshot: {
+      sessionId: "session-stream",
+      model: "tokenpilot/gpt-5.4-mini",
+      stream: true,
+      stablePrefixFingerprint: "fp-stream",
+      stablePrefix: { schemaVersion: 1, stableCore: [], semiStableContext: [] },
+      entropyFindings: [],
+      driftReasons: [],
+      requestPromptCacheKey: "pk-stream-1",
+    },
   } as any);
 
   assert.equal(res.statusCode, 200);
@@ -229,4 +242,5 @@ test("handleStreamingProxyResponse forwards stream and records stream ux after f
   assert.equal(recordedUx.length, 1);
   assert.equal(recordedUx[0].savedCount, "hello original canonical".length - "hello reduced canonical".length);
   assert.equal(traces.some((item) => item.stage === "proxy_stream_forward"), true);
+  assert.equal(cacheAuditRecords.length, 0);
 });

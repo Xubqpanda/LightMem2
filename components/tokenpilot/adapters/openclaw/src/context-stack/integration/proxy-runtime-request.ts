@@ -14,6 +14,7 @@ import { injectMemoryFaultProtocolInstructionsText } from "../page-in/recovery-p
 import type { UpstreamConfig } from "./upstream.js";
 import { normalizeResponsesInputForUpstream } from "./proxy-runtime-shared.js";
 import { recordProxyInbound } from "./proxy-runtime-logging.js";
+import { buildOpenClawCacheAuditSnapshot } from "../../cache-audit.js";
 
 type ProxyRequestPreparation = {
   payload: any;
@@ -39,6 +40,7 @@ type ProxyRequestPreparation = {
   firstTurnCandidate: boolean;
   originalPromptCacheKey: string;
   reductionPassOptions: any;
+  cacheAuditSnapshot: Omit<import("../../cache-audit.js").OpenClawCacheAuditRecord, "at" | "responsePromptCacheKey" | "cachedInputTokens" | "usage" | "status">;
 };
 
 function buildReductionSkippedResult(
@@ -471,6 +473,16 @@ export async function prepareProxyRequest(args: {
     shouldRecordStability: !proxyPureForward && Boolean(cfg.stateDir) && Boolean(devAndUser),
   });
   payload.prompt_cache_retention = "24h";
+  const cacheAuditSnapshot = buildOpenClawCacheAuditSnapshot({
+    envelope: requestEnvelope,
+    sessionId: resolvedSessionId,
+    model: requestEnvelope.model,
+    stream: requestEnvelope.stream,
+    requestPromptCacheKey:
+      typeof requestEnvelope.metadata?.promptCacheKey === "string"
+        ? requestEnvelope.metadata.promptCacheKey
+        : null,
+  });
   return {
     payload,
     requestEnvelope,
@@ -495,5 +507,6 @@ export async function prepareProxyRequest(args: {
     firstTurnCandidate,
     originalPromptCacheKey,
     reductionPassOptions,
+    cacheAuditSnapshot,
   };
 }
