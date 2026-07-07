@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import {
   appendReductionVisualSnapshot,
   readVisualSessionData,
+  readVisualSessionDataWithOptions,
   readVisualSessionList,
+  readVisualSessionListWithOptions,
 } from "../src/visual/session-visual-data.js";
 
 test("readVisualSessionData returns reduction snapshot route and ux aggregate", async () => {
@@ -271,6 +273,161 @@ test("readVisualSessionData orders same-call segments by later item position whe
       data.reductionCalls?.[0]?.segments.map((segment) => segment.segmentId),
       ["input-41-output", "input-40-output", "input-33-output"],
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("readVisualSessionDataWithOptions limits returned stability, reduction calls, and eviction items", async () => {
+  const root = await mkdtemp(join(tmpdir(), "tokenpilot-product-surface-visual-limits-"));
+  try {
+    const stateDir = root;
+    const sessionId = "session-limit";
+    await mkdir(join(stateDir, "tokenpilot", "visual", "stability"), { recursive: true });
+    await mkdir(join(stateDir, "tokenpilot", "visual", "eviction"), { recursive: true });
+    await writeFile(
+      join(stateDir, "tokenpilot", "visual", "stability", `${sessionId}.jsonl`),
+      [
+        {
+          kind: "stability",
+          at: "2026-07-07T10:00:00.000Z",
+          sessionId,
+          model: "gpt-5.4",
+          upstreamModel: "gpt-5.4",
+          promptCacheKeyBefore: "a",
+          promptCacheKeyAfter: "b",
+          dynamicContextTarget: "developer",
+          userContentRewrites: 0,
+          senderMetadataBlocksBefore: 0,
+          senderMetadataBlocksAfter: 0,
+          developerBefore: "before-1",
+          developerCanonical: "canonical-1",
+          developerForwarded: "forwarded-1",
+          firstTurnCandidate: true,
+        },
+        {
+          kind: "stability",
+          at: "2026-07-07T10:01:00.000Z",
+          sessionId,
+          model: "gpt-5.4",
+          upstreamModel: "gpt-5.4",
+          promptCacheKeyBefore: "c",
+          promptCacheKeyAfter: "d",
+          dynamicContextTarget: "developer",
+          userContentRewrites: 0,
+          senderMetadataBlocksBefore: 0,
+          senderMetadataBlocksAfter: 0,
+          developerBefore: "before-2",
+          developerCanonical: "canonical-2",
+          developerForwarded: "forwarded-2",
+          firstTurnCandidate: false,
+        },
+      ].map((entry) => JSON.stringify(entry)).join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(stateDir, "tokenpilot", "visual", "eviction", `${sessionId}.jsonl`),
+      [
+        {
+          kind: "eviction",
+          at: "2026-07-07T10:00:00.000Z",
+          sessionId,
+          taskId: "task-1",
+          replacementMode: "pointer_stub",
+          beforeText: "before-1",
+          afterText: "after-1",
+          beforeChars: 10,
+          afterChars: 2,
+          archivePath: "/tmp/archive-1",
+          dataKey: "data-1",
+          turnAbsIds: ["t1"],
+        },
+        {
+          kind: "eviction",
+          at: "2026-07-07T10:02:00.000Z",
+          sessionId,
+          taskId: "task-2",
+          replacementMode: "pointer_stub",
+          beforeText: "before-2",
+          afterText: "after-2",
+          beforeChars: 12,
+          afterChars: 3,
+          archivePath: "/tmp/archive-2",
+          dataKey: "data-2",
+          turnAbsIds: ["t2"],
+        },
+      ].map((entry) => JSON.stringify(entry)).join("\n"),
+      "utf8",
+    );
+    for (let index = 0; index < 3; index += 1) {
+      await appendReductionVisualSnapshot(stateDir, {
+        kind: "reduction",
+        at: `2026-07-07T10:0${index}:30.000Z`,
+        sessionId,
+        requestId: `req-${index}`,
+        model: "gpt-5.4",
+        upstreamModel: "gpt-5.4",
+        segmentId: `seg-${index}`,
+        itemIndex: index,
+        field: "output",
+        savedChars: 10 + index,
+        beforeText: `before-${index}`,
+        afterText: `after-${index}`,
+        report: [],
+      });
+    }
+
+    const data = await readVisualSessionDataWithOptions(stateDir, sessionId, {
+      stabilityLimit: 1,
+      reductionCallLimit: 2,
+      evictionLimit: 1,
+    });
+    assert.equal(data.stability.length, 1);
+    assert.equal(data.reductionCalls?.length, 2);
+    assert.equal(data.reduction.length, 2);
+    assert.equal(data.eviction.length, 1);
+    assert.equal(data.limits?.stabilityTotal, 2);
+    assert.equal(data.limits?.stabilityReturned, 1);
+    assert.equal(data.limits?.reductionCallTotal, 3);
+    assert.equal(data.limits?.reductionCallReturned, 2);
+    assert.equal(data.limits?.evictionTotal, 2);
+    assert.equal(data.limits?.evictionReturned, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("readVisualSessionListWithOptions paginates ordered sessions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "tokenpilot-product-surface-visual-session-page-"));
+  try {
+    const stateDir = root;
+    await mkdir(join(stateDir, "tokenpilot", "visual", "reduction"), { recursive: true });
+    for (let index = 0; index < 3; index += 1) {
+      const sessionId = `session-${index}`;
+      await writeFile(
+        join(stateDir, "tokenpilot", "visual", "reduction", `${sessionId}.jsonl`),
+        `${JSON.stringify({
+          kind: "reduction",
+          at: `2026-07-07T10:0${index}:00.000Z`,
+          sessionId,
+          requestId: `req-${index}`,
+          model: "gpt-5.4",
+          upstreamModel: "gpt-5.4",
+          segmentId: `seg-${index}`,
+          itemIndex: index,
+          field: "content",
+          savedChars: index + 1,
+          beforeText: "before",
+          afterText: "after",
+          report: [],
+        })}\n`,
+        "utf8",
+      );
+    }
+    const page = await readVisualSessionListWithOptions(stateDir, { limit: 2, offset: 0 });
+    assert.equal(page.total, 3);
+    assert.equal(page.sessions.length, 2);
+    assert.deepEqual(page.sessions.map((session) => session.sessionId), ["session-2", "session-1"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

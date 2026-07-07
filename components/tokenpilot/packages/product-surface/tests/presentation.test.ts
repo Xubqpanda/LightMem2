@@ -114,6 +114,9 @@ test("renderVisualPageScript includes cache audit detail panel labels", () => {
   assert.match(script, /data-segment-index/);
   assert.match(script, /state\.activeTab === "reduction" \? "Call " : ""/);
   assert.match(script, /Segment #/);
+  assert.match(script, /Show more sessions/);
+  assert.match(script, /Show all sessions/);
+  assert.match(script, /Show more calls/);
   assert.match(script, /Show all .* fingerprint groups/);
   assert.match(script, /Show fewer fingerprint groups/);
   assert.match(script, / · latest/);

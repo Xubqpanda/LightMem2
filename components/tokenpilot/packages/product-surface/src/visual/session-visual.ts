@@ -1,6 +1,11 @@
 import { createServer, type Server } from "node:http";
 import { defaultPluginStateDir } from "@tokenpilot/runtime-core";
-import { readVisualSessionData, readVisualSessionList } from "./session-visual-data.js";
+import {
+  readVisualSessionData,
+  readVisualSessionDataWithOptions,
+  readVisualSessionList,
+  readVisualSessionListWithOptions,
+} from "./session-visual-data.js";
 import { renderVisualPageHtml, renderVisualPageScript } from "./session-visual-page.js";
 
 export type VisualStateDirResolver = (config: Record<string, unknown>) => string | undefined;
@@ -13,6 +18,15 @@ export type VisualHostSource = {
 
 let visualServerState: VisualServerHandle | null = null;
 let multiHostVisualServerState: (VisualServerHandle & { signature: string }) | null = null;
+const DEFAULT_VISUAL_SESSION_LIMIT = 10;
+const DEFAULT_VISUAL_ITEM_LIMIT = 10;
+
+function parsePositiveIntParam(raw: string | null, fallback: number): number {
+  if (raw == null || !String(raw).trim()) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.trunc(value));
+}
 
 function sendJson(res: any, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -52,7 +66,9 @@ export async function startVisualServer(
         return;
       }
       if (url.pathname === "/api/sessions") {
-        sendJson(res, 200, { sessions: await readVisualSessionList(stateDir) });
+        const limit = parsePositiveIntParam(url.searchParams.get("limit"), DEFAULT_VISUAL_SESSION_LIMIT);
+        const offset = parsePositiveIntParam(url.searchParams.get("offset"), 0);
+        sendJson(res, 200, await readVisualSessionListWithOptions(stateDir, { limit, offset }));
         return;
       }
       if (url.pathname === "/api/session") {
@@ -61,7 +77,14 @@ export async function startVisualServer(
           sendJson(res, 400, { error: "sessionId is required" });
           return;
         }
-        sendJson(res, 200, await readVisualSessionData(stateDir, sessionId));
+        const stabilityLimit = parsePositiveIntParam(url.searchParams.get("stabilityLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        const reductionCallLimit = parsePositiveIntParam(url.searchParams.get("reductionCallLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        const evictionLimit = parsePositiveIntParam(url.searchParams.get("evictionLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        sendJson(res, 200, await readVisualSessionDataWithOptions(stateDir, sessionId, {
+          stabilityLimit,
+          reductionCallLimit,
+          evictionLimit,
+        }));
         return;
       }
       sendJson(res, 404, { error: "not found" });
@@ -130,22 +153,27 @@ async function loadVisualHostsSummary(hosts: VisualHostSource[]): Promise<Array<
 }>> {
   const normalized = normalizeVisualHostSources(hosts);
   return Promise.all(normalized.map(async (host) => {
-    const sessions = await readVisualSessionList(host.stateDir);
+    const sessionList = await readVisualSessionListWithOptions(host.stateDir, {
+      limit: Number.MAX_SAFE_INTEGER,
+      offset: 0,
+      detailsScope: "returned",
+    });
+    const sessions = sessionList.sessions;
     const tokenSavedCount = sessions.reduce((sum, session) => sum + Number(session.tokenSavedCount ?? 0), 0);
     const charSavedCount = sessions.reduce((sum, session) => sum + Number(session.charSavedCount ?? 0), 0);
     return {
       hostId: host.hostId,
       displayName: host.displayName,
-      sessionCount: sessions.length,
-      stabilityCount: sessions.reduce((sum, session) => sum + Number(session.stabilityCount ?? 0), 0),
-      reductionCount: sessions.reduce((sum, session) => sum + Number(session.reductionCount ?? 0), 0),
-      evictionCount: sessions.reduce((sum, session) => sum + Number(session.evictionCount ?? 0), 0),
+      sessionCount: sessionList.total,
+      stabilityCount: sessionList.totals.stabilityCount,
+      reductionCount: sessionList.totals.reductionCount,
+      evictionCount: sessionList.totals.evictionCount,
       tokenSavedCount,
       charSavedCount,
       tokenOptimizedTurns: sessions.reduce((sum, session) => sum + Number(session.tokenOptimizedTurns ?? 0), 0),
       charOptimizedTurns: sessions.reduce((sum, session) => sum + Number(session.charOptimizedTurns ?? 0), 0),
       latestCountMode: tokenSavedCount > 0 ? "openai_tokens" : (charSavedCount > 0 ? "chars" : undefined),
-      latestAt: sessions.reduce((latest, session) => String(session.lastAt ?? "") > latest ? String(session.lastAt ?? "") : latest, ""),
+      latestAt: sessionList.totals.latestAt,
       cacheWarmCandidates: sessions.reduce((sum, session) => sum + Number(session.cacheAuditSummary?.warmCandidates ?? 0), 0),
       cacheWarmHits: sessions.reduce((sum, session) => sum + Number(session.cacheAuditSummary?.warmHits ?? 0), 0),
       cacheWarmMisses: sessions.reduce((sum, session) => sum + Number(session.cacheAuditSummary?.warmMisses ?? 0), 0),
@@ -194,12 +222,15 @@ export async function startMultiHostVisualServer(
         const hostId = String(url.searchParams.get("host") ?? "").trim();
         const host = hostById.get(hostId) ?? normalizedHosts[0];
         if (!host) {
-          sendJson(res, 200, { hostId: "", sessions: [] });
+          sendJson(res, 200, { hostId: "", sessions: [], total: 0, offset: 0, limit: DEFAULT_VISUAL_SESSION_LIMIT });
           return;
         }
+        const limit = parsePositiveIntParam(url.searchParams.get("limit"), DEFAULT_VISUAL_SESSION_LIMIT);
+        const offset = parsePositiveIntParam(url.searchParams.get("offset"), 0);
+        const payload = await readVisualSessionListWithOptions(host.stateDir, { limit, offset });
         sendJson(res, 200, {
           hostId: host.hostId,
-          sessions: await readVisualSessionList(host.stateDir),
+          ...payload,
         });
         return;
       }
@@ -215,7 +246,14 @@ export async function startMultiHostVisualServer(
           sendJson(res, 400, { error: "sessionId is required" });
           return;
         }
-        sendJson(res, 200, await readVisualSessionData(host.stateDir, sessionId));
+        const stabilityLimit = parsePositiveIntParam(url.searchParams.get("stabilityLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        const reductionCallLimit = parsePositiveIntParam(url.searchParams.get("reductionCallLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        const evictionLimit = parsePositiveIntParam(url.searchParams.get("evictionLimit"), DEFAULT_VISUAL_ITEM_LIMIT);
+        sendJson(res, 200, await readVisualSessionDataWithOptions(host.stateDir, sessionId, {
+          stabilityLimit,
+          reductionCallLimit,
+          evictionLimit,
+        }));
         return;
       }
       sendJson(res, 404, { error: "not found" });

@@ -259,8 +259,12 @@ test("multi-host visual server exposes hosts and host-scoped sessions", async ()
       const openclawSessionsPayload = await openclawSessionsResp.json() as {
         hostId: string;
         sessions: Array<{ sessionId: string }>;
+        total: number;
+        limit: number;
       };
       assert.equal(openclawSessionsPayload.hostId, "openclaw");
+      assert.equal(openclawSessionsPayload.total, 1);
+      assert.equal(openclawSessionsPayload.limit, 10);
       assert.deepEqual(openclawSessionsPayload.sessions.map((session) => session.sessionId), ["openclaw-session-1"]);
 
       const codexSessionResp = await fetch(
@@ -269,6 +273,11 @@ test("multi-host visual server exposes hosts and host-scoped sessions", async ()
       const codexSessionPayload = await codexSessionResp.json() as {
         sessionId: string;
         reduction: Array<{ beforeText: string; afterText: string }>;
+        reductionCalls?: Array<{ requestId: string }>;
+        limits?: {
+          reductionCallTotal: number;
+          reductionCallReturned: number;
+        };
         cacheAuditSummary?: {
           warmHits: number;
           warmCandidates: number;
@@ -282,6 +291,9 @@ test("multi-host visual server exposes hosts and host-scoped sessions", async ()
       };
       assert.equal(codexSessionPayload.sessionId, "codex-session-1");
       assert.equal(codexSessionPayload.reduction[0]?.beforeText, "before-codex");
+      assert.equal(codexSessionPayload.reductionCalls?.length, 1);
+      assert.equal(codexSessionPayload.limits?.reductionCallTotal, 1);
+      assert.equal(codexSessionPayload.limits?.reductionCallReturned, 1);
       assert.equal(codexSessionPayload.cacheAuditSummary?.warmHits, 1);
       assert.equal(codexSessionPayload.cacheAuditSummary?.warmCandidates, 1);
       assert.equal(codexSessionPayload.cacheAuditSummary?.responsePromptCacheKeyRewriteCount, 1);

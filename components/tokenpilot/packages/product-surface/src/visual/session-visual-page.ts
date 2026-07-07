@@ -95,6 +95,16 @@ export function renderVisualPageHtml(): string {
       display: grid;
       gap: 8px;
     }
+    .session-list-footer {
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .session-list-note {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
     .session-item {
       width: 100%;
       border: 1px solid transparent;
@@ -241,6 +251,12 @@ export function renderVisualPageHtml(): string {
       justify-content: space-between;
       gap: 16px;
       margin-bottom: 18px;
+    }
+    .panel-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .panel-title {
       margin: 0;
@@ -460,10 +476,11 @@ export function renderVisualPageHtml(): string {
       <section id="overviewRoot" class="overview"></section>
       <section class="panel">
         <div class="panel-header">
-          <div>
-            <h2 id="panelTitle" class="panel-title">No session selected</h2>
-            <div id="panelMeta" class="panel-meta"></div>
-          </div>
+        <div>
+          <h2 id="panelTitle" class="panel-title">No session selected</h2>
+          <div id="panelMeta" class="panel-meta"></div>
+          <div id="panelActions" class="panel-actions"></div>
+        </div>
           <div class="pager">
             <button id="prevBtn" class="nav-btn" type="button">Previous</button>
             <div id="pagerLabel" class="pager-label">0 / 0</div>
@@ -483,8 +500,13 @@ export function renderVisualPageHtml(): string {
 
 export function renderVisualPageScript(): string {
   return `const state = {
+  defaultSessionLimit: 10,
+  defaultItemLimit: 10,
   hosts: [],
   sessions: [],
+  sessionListTotal: 0,
+  sessionListOffset: 0,
+  sessionListLimit: 10,
   activeHost: new URL(window.location.href).searchParams.get("host") || "",
   activeSessionId: new URL(window.location.href).searchParams.get("session") || "",
   activeTab: new URL(window.location.href).searchParams.get("tab") || "stability",
@@ -495,6 +517,7 @@ export function renderVisualPageScript(): string {
   reductionSegmentIndex: 0,
   reductionActiveCallKey: "",
   fingerprintGroupsExpanded: false,
+  itemLimits: {},
 };
 
 const el = {
@@ -509,6 +532,7 @@ const el = {
   tabEviction: document.getElementById("tabEviction"),
   panelTitle: document.getElementById("panelTitle"),
   panelMeta: document.getElementById("panelMeta"),
+  panelActions: document.getElementById("panelActions"),
   pagerLabel: document.getElementById("pagerLabel"),
   prevBtn: document.getElementById("prevBtn"),
   nextBtn: document.getElementById("nextBtn"),
@@ -814,6 +838,34 @@ async function fetchJson(path) {
   return response.json();
 }
 
+function sessionKey() {
+  return (state.activeHost || "") + "::" + (state.activeSessionId || "");
+}
+
+function sessionItemLimitKey(tab) {
+  return sessionKey() + "::" + tab;
+}
+
+function currentTabLimitParamName(tab) {
+  if (tab === "reduction") return "reductionCallLimit";
+  if (tab === "eviction") return "evictionLimit";
+  return "stabilityLimit";
+}
+
+function currentTabTotal(data, tab) {
+  const limits = data && data.limits ? data.limits : {};
+  if (tab === "reduction") return Number(limits.reductionCallTotal || 0);
+  if (tab === "eviction") return Number(limits.evictionTotal || 0);
+  return Number(limits.stabilityTotal || 0);
+}
+
+function currentTabReturned(data, tab) {
+  const limits = data && data.limits ? data.limits : {};
+  if (tab === "reduction") return Number(limits.reductionCallReturned || 0);
+  if (tab === "eviction") return Number(limits.evictionReturned || 0);
+  return Number(limits.stabilityReturned || 0);
+}
+
 async function loadHosts() {
   const payload = await fetchJson("/api/hosts");
   state.hosts = Array.isArray(payload.hosts) ? payload.hosts : [];
@@ -828,12 +880,18 @@ async function loadSessions() {
   await loadHosts();
   if (!state.activeHost) {
     state.sessions = [];
+    state.sessionListTotal = 0;
     renderSessionList();
     renderEmpty("No visual hosts available yet.");
     return;
   }
-  const payload = await fetchJson("/api/sessions?host=" + encodeURIComponent(state.activeHost));
+  const payload = await fetchJson(
+    "/api/sessions?host=" + encodeURIComponent(state.activeHost)
+    + "&limit=" + encodeURIComponent(String(state.sessionListLimit))
+    + "&offset=" + encodeURIComponent(String(state.sessionListOffset)),
+  );
   state.sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+  state.sessionListTotal = Number(payload.total || state.sessions.length || 0);
   const preferredSessionId = state.lastSessionByHost[state.activeHost] || state.activeSessionId;
   const matchedSession = preferredSessionId
     ? state.sessions.find((session) => session.sessionId === preferredSessionId)
@@ -913,11 +971,18 @@ async function loadSession(sessionId) {
   query.searchParams.set("session", sessionId);
   query.searchParams.set("tab", state.activeTab);
   history.replaceState(null, "", query.toString());
-  const sessionKey = (state.activeHost || "") + "::" + sessionId;
-  if (!state.sessionData.has(sessionKey)) {
-    const payload = await fetchJson("/api/session?host=" + encodeURIComponent(state.activeHost || "") + "&sessionId=" + encodeURIComponent(sessionId));
-    state.sessionData.set(sessionKey, payload);
-  }
+  const key = sessionKey();
+  const stabilityLimit = state.itemLimits[key + "::stability"] || state.defaultItemLimit;
+  const reductionCallLimit = state.itemLimits[key + "::reduction"] || state.defaultItemLimit;
+  const evictionLimit = state.itemLimits[key + "::eviction"] || state.defaultItemLimit;
+  const payload = await fetchJson(
+    "/api/session?host=" + encodeURIComponent(state.activeHost || "")
+    + "&sessionId=" + encodeURIComponent(sessionId)
+    + "&stabilityLimit=" + encodeURIComponent(String(stabilityLimit))
+    + "&reductionCallLimit=" + encodeURIComponent(String(reductionCallLimit))
+    + "&evictionLimit=" + encodeURIComponent(String(evictionLimit)),
+  );
+  state.sessionData.set(key, payload);
   renderSessionList();
   renderActiveView();
 }
@@ -938,7 +1003,7 @@ function renderSessionList() {
     : activeHost
       ? activeHost.displayName + " · Pick a session from the left."
       : "Pick a session from the left.";
-  el.sessionList.innerHTML = state.sessions.map((session, index) => {
+  const listHtml = state.sessions.map((session, index) => {
     const active = session.sessionId === state.activeSessionId ? "active" : "";
     const savings = savingsSummary(session);
     const cache = session.cacheAuditSummary && session.cacheAuditSummary.warmCandidates > 0
@@ -949,11 +1014,35 @@ function renderSessionList() {
       + '<div class="session-meta"><span>S ' + fmtInt(session.stabilityCount) + '</span><span>R ' + fmtInt(session.reductionCount) + '</span><span>E ' + fmtInt(session.evictionCount) + '</span>' + cache + (savings ? '<span>' + escapeHtml(savings) + '</span>' : '') + '<span>' + escapeHtml(fmtDate(session.lastAt)) + '</span></div>'
       + '</button>';
   }).join("");
+  const showingLabel = 'Showing ' + fmtInt(state.sessions.length) + ' / ' + fmtInt(state.sessionListTotal) + ' sessions';
+  const hasMoreSessions = state.sessions.length < state.sessionListTotal;
+  el.sessionList.innerHTML = listHtml
+    + '<div class="session-list-footer">'
+    + '<div class="session-list-note">' + escapeHtml(showingLabel) + '</div>'
+    + (hasMoreSessions
+      ? '<button id="showMoreSessionsBtn" class="nav-btn" type="button">Show more sessions</button>'
+        + '<button id="showAllSessionsBtn" class="nav-btn" type="button">Show all sessions</button>'
+      : '')
+    + '</div>';
   el.sessionList.querySelectorAll(".session-item").forEach((node) => {
     node.addEventListener("click", () => {
       void loadSession(node.getAttribute("data-session-id") || "");
     });
   });
+  const showMoreSessionsBtn = document.getElementById("showMoreSessionsBtn");
+  if (showMoreSessionsBtn) {
+    showMoreSessionsBtn.addEventListener("click", () => {
+      state.sessionListLimit += state.defaultSessionLimit;
+      void loadSessions();
+    });
+  }
+  const showAllSessionsBtn = document.getElementById("showAllSessionsBtn");
+  if (showAllSessionsBtn) {
+    showAllSessionsBtn.addEventListener("click", () => {
+      state.sessionListLimit = state.sessionListTotal;
+      void loadSessions();
+    });
+  }
 }
 
 function activeItems() {
@@ -968,6 +1057,7 @@ function renderEmpty(message) {
   el.panelTitle.textContent = state.activeSessionId || "No session selected";
   el.subtitle.textContent = message;
   el.panelMeta.innerHTML = "";
+  el.panelActions.innerHTML = "";
   el.pagerLabel.textContent = "0 / 0";
   el.prevBtn.disabled = true;
   el.nextBtn.disabled = true;
@@ -983,6 +1073,8 @@ async function setActiveHost(hostId) {
   state.activeHost = hostId || "";
   state.activeSessionId = "";
   state.sessions = [];
+  state.sessionListOffset = 0;
+  state.sessionListLimit = state.defaultSessionLimit;
   state.reductionSegmentIndex = 0;
   state.reductionActiveCallKey = "";
   state.fingerprintGroupsExpanded = false;
@@ -1239,9 +1331,23 @@ function renderActiveView() {
   }
   const safeIndex = Math.max(0, Math.min(index, items.length - 1));
   state.indexes[state.activeTab] = safeIndex;
-  el.pagerLabel.textContent = (state.activeTab === "reduction" ? "Call " : "") + (safeIndex + 1) + " / " + items.length;
+  const data = state.sessionData.get(sessionKey()) || {};
+  const totalItems = currentTabTotal(data, state.activeTab) || items.length;
+  const returnedItems = currentTabReturned(data, state.activeTab) || items.length;
+  el.pagerLabel.textContent = (state.activeTab === "reduction" ? "Call " : "")
+    + (safeIndex + 1) + " / " + returnedItems
+    + (returnedItems < totalItems ? " shown · " + totalItems + " total" : "");
   el.prevBtn.disabled = safeIndex <= 0;
   el.nextBtn.disabled = safeIndex >= items.length - 1;
+  const limitKey = sessionItemLimitKey(state.activeTab);
+  const nextLimit = (state.itemLimits[limitKey] || state.defaultItemLimit) + state.defaultItemLimit;
+  const showMoreLabel = state.activeTab === "reduction" ? "Show more calls" : "Show more";
+  const showAllLabel = state.activeTab === "reduction" ? "Show all calls" : "Show all";
+  el.panelActions.innerHTML = returnedItems < totalItems
+    ? '<button id="showMoreItemsBtn" class="nav-btn" type="button">' + escapeHtml(showMoreLabel) + '</button>'
+      + '<button id="showAllItemsBtn" class="nav-btn" type="button">' + escapeHtml(showAllLabel) + '</button>'
+      + '<span class="session-list-note">' + escapeHtml("Showing " + returnedItems + " / " + totalItems) + '</span>'
+    : '<span class="session-list-note">' + escapeHtml("Showing " + returnedItems + " / " + totalItems) + '</span>';
   const item = items[safeIndex];
   if (state.activeTab !== "reduction") {
     state.reductionSegmentIndex = 0;
@@ -1254,6 +1360,20 @@ function renderActiveView() {
     renderReduction(item);
   } else {
     renderEviction(item);
+  }
+  const showMoreItemsBtn = document.getElementById("showMoreItemsBtn");
+  if (showMoreItemsBtn) {
+    showMoreItemsBtn.addEventListener("click", () => {
+      state.itemLimits[limitKey] = nextLimit;
+      void loadSession(state.activeSessionId);
+    });
+  }
+  const showAllItemsBtn = document.getElementById("showAllItemsBtn");
+  if (showAllItemsBtn) {
+    showAllItemsBtn.addEventListener("click", () => {
+      state.itemLimits[limitKey] = totalItems;
+      void loadSession(state.activeSessionId);
+    });
   }
 }
 

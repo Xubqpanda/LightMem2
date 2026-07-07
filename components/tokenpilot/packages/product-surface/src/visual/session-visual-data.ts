@@ -122,6 +122,29 @@ export type VisualSessionData = {
   cacheAuditSummary?: CacheAuditSummary | null;
   recentCacheAudit?: VisualCacheAuditEntry[];
   recentCacheAuditGroups?: VisualCacheAuditGroup[];
+  limits?: {
+    stabilityTotal: number;
+    stabilityReturned: number;
+    reductionTotal: number;
+    reductionReturned: number;
+    reductionCallTotal: number;
+    reductionCallReturned: number;
+    evictionTotal: number;
+    evictionReturned: number;
+  };
+};
+
+export type VisualSessionListResult = {
+  sessions: VisualSessionSummary[];
+  total: number;
+  offset: number;
+  limit: number;
+  totals: {
+    stabilityCount: number;
+    reductionCount: number;
+    evictionCount: number;
+    latestAt: string;
+  };
 };
 
 export type VisualReductionCallGroup = {
@@ -444,11 +467,23 @@ export async function appendEvictionVisualSnapshot(stateDir: string, snapshot: E
 }
 
 export async function readVisualSessionData(stateDir: string, sessionId: string): Promise<VisualSessionData> {
-  const stability = sortByAtDesc(await readSnapshotFile<StabilityVisualSnapshot>(snapshotCandidates(stateDir, "stability", sessionId)));
-  const reduction = dedupeReductionSnapshots(
+  return readVisualSessionDataWithOptions(stateDir, sessionId);
+}
+
+export async function readVisualSessionDataWithOptions(
+  stateDir: string,
+  sessionId: string,
+  options?: {
+    stabilityLimit?: number;
+    reductionCallLimit?: number;
+    evictionLimit?: number;
+  },
+): Promise<VisualSessionData> {
+  const allStability = sortByAtDesc(await readSnapshotFile<StabilityVisualSnapshot>(snapshotCandidates(stateDir, "stability", sessionId)));
+  const allReduction = dedupeReductionSnapshots(
     await readSnapshotFile<ReductionVisualSnapshot>(snapshotCandidates(stateDir, "reduction", sessionId)),
   );
-  const eviction = sortByAtDesc(await readSnapshotFile<EvictionVisualSnapshot>(snapshotCandidates(stateDir, "eviction", sessionId)));
+  const allEviction = sortByAtDesc(await readSnapshotFile<EvictionVisualSnapshot>(snapshotCandidates(stateDir, "eviction", sessionId)));
   const [uxAggregate, recentMetrics, cacheAuditRecords] = await Promise.all([
     readJsonFile<VisualUxAggregate>(uxAggregateCandidates(stateDir, sessionId)),
     readRecentReductionMetrics(stateDir, sessionId),
@@ -456,7 +491,23 @@ export async function readVisualSessionData(stateDir: string, sessionId: string)
   ]);
   const cacheAuditSummary = cacheAuditRecords.length > 0 ? summarizeCacheAudit(cacheAuditRecords) : null;
   const recentCacheAudit = sortByAtDesc(cacheAuditRecords).slice(0, 8).map(toVisualCacheAuditEntry);
-  const reductionCalls = groupReductionSnapshotsByRequest(reduction);
+  const allReductionCalls = groupReductionSnapshotsByRequest(allReduction);
+  const stabilityLimit = Number.isFinite(options?.stabilityLimit)
+    ? Math.max(0, Math.trunc(options?.stabilityLimit ?? 0))
+    : undefined;
+  const reductionCallLimit = Number.isFinite(options?.reductionCallLimit)
+    ? Math.max(0, Math.trunc(options?.reductionCallLimit ?? 0))
+    : undefined;
+  const evictionLimit = Number.isFinite(options?.evictionLimit)
+    ? Math.max(0, Math.trunc(options?.evictionLimit ?? 0))
+    : undefined;
+  const stability = typeof stabilityLimit === "number" ? allStability.slice(0, stabilityLimit) : allStability;
+  const reductionCalls = typeof reductionCallLimit === "number"
+    ? allReductionCalls.slice(0, reductionCallLimit)
+    : allReductionCalls;
+  const allowedRequestIds = new Set(reductionCalls.map((group) => group.requestId));
+  const reduction = allReduction.filter((snapshot) => allowedRequestIds.has(snapshot.requestId));
+  const eviction = typeof evictionLimit === "number" ? allEviction.slice(0, evictionLimit) : allEviction;
   return {
     sessionId,
     stability,
@@ -468,10 +519,31 @@ export async function readVisualSessionData(stateDir: string, sessionId: string)
     cacheAuditSummary,
     recentCacheAudit,
     recentCacheAuditGroups: groupVisualCacheAuditEntries(recentCacheAudit),
+    limits: {
+      stabilityTotal: allStability.length,
+      stabilityReturned: stability.length,
+      reductionTotal: allReduction.length,
+      reductionReturned: reduction.length,
+      reductionCallTotal: allReductionCalls.length,
+      reductionCallReturned: reductionCalls.length,
+      evictionTotal: allEviction.length,
+      evictionReturned: eviction.length,
+    },
   };
 }
 
 export async function readVisualSessionList(stateDir: string): Promise<VisualSessionSummary[]> {
+  return (await readVisualSessionListWithOptions(stateDir)).sessions;
+}
+
+export async function readVisualSessionListWithOptions(
+  stateDir: string,
+  options?: {
+    limit?: number;
+    offset?: number;
+    detailsScope?: "all" | "returned";
+  },
+): Promise<VisualSessionListResult> {
   const stabilityFiles = await listSnapshotFiles(stateDir, "stability");
   const reductionFiles = await listSnapshotFiles(stateDir, "reduction");
   const evictionFiles = await listSnapshotFiles(stateDir, "eviction");
@@ -526,7 +598,15 @@ export async function readVisualSessionList(stateDir: string): Promise<VisualSes
     await mergeCount("eviction", fileName);
   }
 
-  await Promise.all([...summaryBySessionId.values()].map(async (summary) => {
+  const ordered = [...summaryBySessionId.values()].sort((left, right) => right.lastAt.localeCompare(left.lastAt));
+  const total = ordered.length;
+  const offset = Number.isFinite(options?.offset) ? Math.max(0, Math.trunc(options?.offset ?? 0)) : 0;
+  const limit = Number.isFinite(options?.limit) ? Math.max(0, Math.trunc(options?.limit ?? 0)) : total;
+  const paged = ordered.slice(offset, offset + limit);
+  const detailsScope = options?.detailsScope === "returned" ? "returned" : "all";
+  const enrichTargets = detailsScope === "returned" ? paged : ordered;
+
+  await Promise.all(enrichTargets.map(async (summary) => {
     const [uxAggregate, cacheAuditSummary] = await Promise.all([
       readJsonFile<VisualUxAggregate>(uxAggregateCandidates(stateDir, summary.sessionId)),
       readRecentCacheAuditRecordsForSession(stateDir, summary.sessionId, 64).then((records) => (
@@ -547,5 +627,16 @@ export async function readVisualSessionList(stateDir: string): Promise<VisualSes
     }
   }));
 
-  return [...summaryBySessionId.values()].sort((left, right) => right.lastAt.localeCompare(left.lastAt));
+  return {
+    sessions: paged,
+    total,
+    offset,
+    limit,
+    totals: {
+      stabilityCount: ordered.reduce((sum, session) => sum + Number(session.stabilityCount ?? 0), 0),
+      reductionCount: ordered.reduce((sum, session) => sum + Number(session.reductionCount ?? 0), 0),
+      evictionCount: ordered.reduce((sum, session) => sum + Number(session.evictionCount ?? 0), 0),
+      latestAt: ordered.reduce((latest, session) => String(session.lastAt ?? "") > latest ? String(session.lastAt ?? "") : latest, ""),
+    },
+  };
 }
