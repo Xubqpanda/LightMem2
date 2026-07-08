@@ -46,6 +46,15 @@ export type ProductSurfaceSessionOverviewItem = {
   value: string | number;
 };
 
+export type ProductSurfaceLatestNonWarmCacheDiagnosis = {
+  at?: string;
+  matchedResult: "cold start" | "cold miss";
+  driftKeys: string[];
+  entropyKinds: string[];
+  currentState: string;
+  optimizationHint: string;
+};
+
 export type ProductSurfaceSessionReportData = {
   title?: string;
   sessionId: string;
@@ -65,6 +74,7 @@ export type ProductSurfaceSessionReportData = {
     topEntropyKinds: Array<{ key: string; count: number }>;
     topDriftKeys: Array<{ key: string; count: number }>;
   } | null;
+  latestNonWarmCacheDiagnosis?: ProductSurfaceLatestNonWarmCacheDiagnosis | null;
 };
 
 export type ProductSurfaceCacheAuditSummary = NonNullable<ProductSurfaceSessionReportData["cacheAuditSummary"]>;
@@ -89,6 +99,31 @@ function formatPercent(value: number): string {
   return rounded % 10 === 0
     ? `${Math.round(value)}%`
     : `${(rounded / 10).toFixed(1)}%`;
+}
+
+function buildLatestNonWarmDiagnosisLines(
+  latestNonWarmCacheDiagnosis?: ProductSurfaceLatestNonWarmCacheDiagnosis | null,
+): string[] {
+  if (!latestNonWarmCacheDiagnosis) return [];
+  const drift = latestNonWarmCacheDiagnosis.driftKeys
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const entropy = latestNonWarmCacheDiagnosis.entropyKinds
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const diagnosisLabel = latestNonWarmCacheDiagnosis.matchedResult === "cold start"
+    ? "latest cold start"
+    : "latest cold miss";
+  const lines: string[] = [];
+  if (drift.length > 0) {
+    lines.push(`- ${diagnosisLabel} drift: ${drift.join(", ")}`);
+  } else if (entropy.length > 0) {
+    lines.push(`- ${diagnosisLabel} entropy: ${entropy.join(", ")}`);
+  }
+  if (latestNonWarmCacheDiagnosis.optimizationHint) {
+    lines.push(`- ${diagnosisLabel} hint: ${latestNonWarmCacheDiagnosis.optimizationHint}`);
+  }
+  return lines;
 }
 
 export function formatTokenPilotHelp(section?: string): string {
@@ -295,8 +330,19 @@ export function formatSessionReport(params: {
   recentMetrics?: ProductSurfaceRecentReductionMetrics | null;
   overview?: ProductSurfaceSessionOverviewItem[];
   cacheAuditSummary?: ProductSurfaceSessionReportData["cacheAuditSummary"];
+  latestNonWarmCacheDiagnosis?: ProductSurfaceSessionReportData["latestNonWarmCacheDiagnosis"];
 }): string {
-  const { title, sessionId, aggregate, latest, detailsEnabled, recentMetrics, overview, cacheAuditSummary } = params;
+  const {
+    title,
+    sessionId,
+    aggregate,
+    latest,
+    detailsEnabled,
+    recentMetrics,
+    overview,
+    cacheAuditSummary,
+    latestNonWarmCacheDiagnosis,
+  } = params;
   const latestCountMode = latest?.countMode ?? aggregate.latestCountMode ?? "openai_tokens";
   const unitLabel = countModeLabel(latestCountMode);
   const savedCount = latestCountMode === "chars" ? aggregate.charSavedCount : aggregate.tokenSavedCount;
@@ -384,6 +430,7 @@ export function formatSessionReport(params: {
           .join(", ")}`,
       );
     }
+    lines.push(...buildLatestNonWarmDiagnosisLines(latestNonWarmCacheDiagnosis));
   }
 
   return lines.join("\n");
@@ -400,15 +447,23 @@ export function buildSessionReportText(params: ProductSurfaceSessionReportData):
     overview,
     emptyMessage,
     cacheAuditSummary,
+    latestNonWarmCacheDiagnosis,
   } = params;
 
   if (!aggregate) {
-    return [
+    const lines = [
       ...(overview ?? []).map((item) => `${item.label}: ${item.value}`),
       title ?? "TokenPilot report:",
       `- session: ${sessionId}`,
       emptyMessage ?? "- no savings recorded yet",
-    ].join("\n");
+    ];
+    if (detailsEnabled) {
+      if (cacheAuditSummary && cacheAuditSummary.warmCandidates > 0) {
+        lines.push(`- cache warm hits: ${formatInt(cacheAuditSummary.warmHits)}/${formatInt(cacheAuditSummary.warmCandidates)} (${formatPercent(cacheAuditSummary.hitRatePercent)})`);
+      }
+      lines.push(...buildLatestNonWarmDiagnosisLines(latestNonWarmCacheDiagnosis));
+    }
+    return lines.join("\n");
   }
 
   return formatSessionReport({
@@ -420,6 +475,7 @@ export function buildSessionReportText(params: ProductSurfaceSessionReportData):
     recentMetrics,
     overview,
     cacheAuditSummary,
+    latestNonWarmCacheDiagnosis,
   });
 }
 
@@ -433,6 +489,7 @@ export async function loadSessionReportData(params: {
   overview?: ProductSurfaceSessionOverviewItem[];
   emptyMessage?: string;
   cacheAuditSummary?: ProductSurfaceSessionReportData["cacheAuditSummary"];
+  latestNonWarmCacheDiagnosis?: ProductSurfaceSessionReportData["latestNonWarmCacheDiagnosis"];
 }): Promise<ProductSurfaceSessionReportData> {
   const {
     stateDir,
@@ -444,6 +501,7 @@ export async function loadSessionReportData(params: {
     overview,
     emptyMessage,
     cacheAuditSummary,
+    latestNonWarmCacheDiagnosis,
   } = params;
   const [aggregate, latest, loadedRecentMetrics] = await Promise.all([
     readers.readAggregate(stateDir, sessionId),
@@ -465,6 +523,7 @@ export async function loadSessionReportData(params: {
     overview,
     emptyMessage,
     cacheAuditSummary,
+    latestNonWarmCacheDiagnosis,
   };
 }
 
@@ -478,6 +537,7 @@ export async function renderSessionReport(params: {
   overview?: ProductSurfaceSessionOverviewItem[];
   emptyMessage?: string;
   cacheAuditSummary?: ProductSurfaceSessionReportData["cacheAuditSummary"];
+  latestNonWarmCacheDiagnosis?: ProductSurfaceSessionReportData["latestNonWarmCacheDiagnosis"];
 }): Promise<string> {
   return buildSessionReportText(await loadSessionReportData(params));
 }

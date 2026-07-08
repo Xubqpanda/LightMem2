@@ -1,15 +1,18 @@
 import type {
+  CacheAuditRecord,
   TokenPilotProductSurfaceConfigAdapter,
   TokenPilotProductCommandResult,
   TokenPilotProductSurfaceHostBridge,
 } from "@tokenpilot/host-adapter";
+import { diagnoseCacheAudit, summarizeCacheAudit } from "@tokenpilot/host-adapter";
 import {
+  buildSessionReportText,
   createProductSurfaceCommandHandler,
   formatDisplayValue,
   formatOnOff,
-  formatSessionReport,
   getNestedValue,
   readRecentReductionMetrics,
+  type ProductSurfaceLatestNonWarmCacheDiagnosis,
   type ProductSurfaceCacheAuditSummary,
   type ProductSurfaceLatestUxEffect,
   type ProductSurfaceSessionAggregate,
@@ -106,10 +109,10 @@ export async function buildSessionReportResult(params: {
   resolveLatestSessionId(stateDir: string): Promise<string | undefined>;
   readLatestUxEffect(stateDir: string): Promise<LatestUxEffectWithSessionId | null>;
   readSessionAggregate(stateDir: string, sessionId: string): Promise<ProductSurfaceSessionAggregate | null>;
-  readCacheAuditSummary?(
+  readRecentCacheAuditRecords?(
     stateDir: string,
     sessionId: string,
-  ): Promise<ProductSurfaceCacheAuditSummary | null>;
+  ): Promise<CacheAuditRecord[]>;
 }): Promise<TokenPilotProductCommandResult> {
   const stateDir = params.configAdapter.resolveStateDir(params.currentConfig);
   if (!stateDir) {
@@ -125,28 +128,64 @@ export async function buildSessionReportResult(params: {
   if (!sessionId) {
     return { text: "No TokenPilot session stats yet." };
   }
-  const aggregate = await params.readSessionAggregate(stateDir, sessionId);
-  if (!aggregate) {
-    return { text: `No TokenPilot savings recorded yet for session ${sessionId}.` };
-  }
   const pluginCfg = params.configAdapter.pluginConfigRecord(params.currentConfig);
   const detailsEnabled = getNestedValue(pluginCfg, ["ux", "details"]) === true;
+  const aggregate = await params.readSessionAggregate(stateDir, sessionId);
   const recentMetrics = detailsEnabled
     ? await readRecentReductionMetrics(stateDir, sessionId)
     : null;
-  const cacheAuditSummary = detailsEnabled && params.readCacheAuditSummary
-    ? await params.readCacheAuditSummary(stateDir, sessionId)
+  const cacheAuditRecords = detailsEnabled && params.readRecentCacheAuditRecords
+    ? await params.readRecentCacheAuditRecords(stateDir, sessionId)
+    : [];
+  const cacheAuditSummary: ProductSurfaceCacheAuditSummary | null = cacheAuditRecords.length > 0
+    ? summarizeCacheAudit(cacheAuditRecords)
     : null;
+  const latestNonWarmCacheDiagnosis = selectLatestNonWarmCacheDiagnosisFromCacheAudit(cacheAuditRecords);
+  if (!aggregate && !cacheAuditSummary) {
+    return { text: `No TokenPilot savings recorded yet for session ${sessionId}.` };
+  }
   return {
-    text: formatSessionReport({
+    text: buildSessionReportText({
       sessionId,
       aggregate,
       latest,
       detailsEnabled,
       recentMetrics,
       cacheAuditSummary,
+      latestNonWarmCacheDiagnosis,
     }),
   };
+}
+
+export function selectLatestNonWarmCacheDiagnosisFromCacheAudit(
+  records: CacheAuditRecord[],
+): ProductSurfaceLatestNonWarmCacheDiagnosis | null {
+  const ordered = [...records].sort((left, right) => String(right.at).localeCompare(String(left.at)));
+  for (const record of ordered) {
+    const diagnosis = diagnoseCacheAudit({
+      stablePrefixFingerprint: record.stablePrefixFingerprint,
+      requestPromptCacheKey: record.requestPromptCacheKey,
+      responsePromptCacheKey: record.responsePromptCacheKey,
+      cachedInputTokens: Number(record.cachedInputTokens ?? 0),
+      baselineKind: record.baselineKind ?? "none",
+      entropyFindings: Array.isArray(record.entropyFindings) ? record.entropyFindings : [],
+      driftReasons: Array.isArray(record.driftReasons) ? record.driftReasons : [],
+    });
+    if (diagnosis.matchedResult === "warm hit" || diagnosis.matchedResult === "unmatched") continue;
+    return {
+      at: record.at,
+      matchedResult: diagnosis.matchedResult,
+      driftKeys: Array.isArray(record.driftReasons)
+        ? record.driftReasons.map((entry) => String(entry.key || "")).filter(Boolean)
+        : [],
+      entropyKinds: Array.isArray(record.entropyFindings)
+        ? record.entropyFindings.map((entry) => String(entry.kind || "")).filter(Boolean)
+        : [],
+      currentState: diagnosis.currentState,
+      optimizationHint: diagnosis.optimizationHint,
+    };
+  }
+  return null;
 }
 
 export function formatRestrictedHostHelp(params: {

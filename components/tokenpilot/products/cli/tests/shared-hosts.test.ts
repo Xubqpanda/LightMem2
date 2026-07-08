@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TokenPilotProductSurfaceConfigAdapter } from "@tokenpilot/host-adapter";
-import { buildSessionReportResult, resolvePreferredSessionId } from "../src/hosts/shared.js";
+import type { CacheAuditRecord, TokenPilotProductSurfaceConfigAdapter } from "@tokenpilot/host-adapter";
+import {
+  buildSessionReportResult,
+  resolvePreferredSessionId,
+  selectLatestNonWarmCacheDiagnosisFromCacheAudit,
+} from "../src/hosts/shared.js";
 
 const passthroughConfigAdapter: TokenPilotProductSurfaceConfigAdapter = {
   pluginConfigRecord(config) {
@@ -22,6 +26,30 @@ const passthroughConfigAdapter: TokenPilotProductSurfaceConfigAdapter = {
     return typeof config.stateDir === "string" ? config.stateDir : undefined;
   },
 };
+
+function makeCacheAuditRecord(overrides: Partial<CacheAuditRecord> = {}): CacheAuditRecord {
+  return {
+    at: "2026-07-08T10:00:00.000Z",
+    sessionId: "session-a",
+    model: "test-model",
+    stream: true,
+    stablePrefixFingerprint: "fp-a",
+    stablePrefix: {
+      schemaVersion: 1,
+      stableCore: [],
+      semiStableContext: [],
+    },
+    entropyFindings: [],
+    driftReasons: [],
+    originalRequestPromptCacheKey: "host-cache-a",
+    requestPromptCacheKey: "cache-a",
+    responsePromptCacheKey: "cache-a",
+    cachedInputTokens: 0,
+    usage: null,
+    status: 200,
+    ...overrides,
+  };
+}
 
 test("shared host helpers prefer explicit session then latest session then latest ux session", async () => {
   const explicit = await resolvePreferredSessionId({
@@ -146,18 +174,21 @@ test("shared host helpers return shared report fallback messages and report text
         avgSavedCharsPerOptimizedTurn: 400,
       };
     },
-    async readCacheAuditSummary(_stateDir, sessionId) {
+    async readRecentCacheAuditRecords(_stateDir, sessionId) {
       assert.equal(sessionId, "session-a");
-      return {
-        warmCandidates: 2,
-        warmHits: 1,
-        warmMisses: 1,
-        hitRatePercent: 50,
-        responsePromptCacheKeyRewriteCount: 1,
-        promptCacheKeyMismatchCount: 1,
-        topEntropyKinds: [{ key: "abs_path", count: 2 }],
-        topDriftKeys: [{ key: "instructions", count: 1 }],
-      };
+      return [
+        makeCacheAuditRecord({
+          cachedInputTokens: 1024,
+          baselineKind: "request_key",
+        }),
+        makeCacheAuditRecord({
+          at: "2026-07-08T10:01:00.000Z",
+          driftReasons: [{ kind: "segment_text_changed", key: "instructions", detail: "changed" }],
+          responsePromptCacheKey: "cache-b",
+          cachedInputTokens: 0,
+          baselineKind: "request_key",
+        }),
+      ];
     },
   });
 
@@ -166,6 +197,95 @@ test("shared host helpers return shared report fallback messages and report text
   assert.equal(noAggregate.text, "No TokenPilot savings recorded yet for session session-latest.");
   assert.match(report.text, /session: session-a/);
   assert.match(report.text, /saved chars: 800/);
-  assert.match(report.text, /cache warm hits: 1\/2 \(50%\)/i);
+  assert.match(report.text, /cache warm hits: 1\/1 \(100%\)/i);
   assert.match(report.text, /response cache key rewrites: 1/i);
+  assert.match(report.text, /latest cold miss drift: instructions/i);
+  assert.match(report.text, /latest cold miss hint: (Session-local change|Fingerprint drift|Cold miss)/i);
+});
+
+test("buildSessionReportResult surfaces cache audit summary even when savings aggregate is absent", async () => {
+  const report = await buildSessionReportResult({
+    currentConfig: {
+      stateDir: "/tmp/tokenpilot-state",
+      ux: { details: true },
+    },
+    explicitSessionId: "session-cache-only",
+    configAdapter: {
+      resolveStateDir(config) {
+        return String((config as Record<string, unknown>).stateDir ?? "");
+      },
+      pluginConfigRecord(config) {
+        return config as Record<string, unknown>;
+      },
+      pluginEntryRecord() {
+        return {};
+      },
+      ensurePluginConfig(config) {
+        return config as Record<string, unknown>;
+      },
+      ensurePluginEntry(config) {
+        return config as Record<string, unknown>;
+      },
+    },
+    async resolveLatestSessionId() {
+      return "session-cache-only";
+    },
+    async readLatestUxEffect() {
+      return {
+        sessionId: "session-cache-only",
+        countMode: "chars",
+      };
+    },
+    async readSessionAggregate() {
+      return null;
+    },
+    async readRecentCacheAuditRecords() {
+      return [
+        makeCacheAuditRecord({
+          sessionId: "session-cache-only",
+          stablePrefixFingerprint: "fp-cache",
+          requestPromptCacheKey: "cache-z",
+          responsePromptCacheKey: "cache-z",
+          entropyFindings: [{ kind: "abs_path", segmentKey: "developer", layer: "stable_core", detail: "path leaked" }],
+          cachedInputTokens: 1024,
+        }),
+        makeCacheAuditRecord({
+          at: "2026-07-08T10:01:00.000Z",
+          sessionId: "session-cache-only",
+          stablePrefixFingerprint: "fp-cache",
+          requestPromptCacheKey: "cache-z",
+          responsePromptCacheKey: "cache-z",
+          entropyFindings: [{ kind: "abs_path", segmentKey: "developer", layer: "stable_core", detail: "path leaked" }],
+          cachedInputTokens: 512,
+        }),
+      ];
+    },
+  });
+
+  assert.match(report.text, /^TokenPilot report:/);
+  assert.match(report.text, /session: session-cache-only/);
+  assert.match(report.text, /no savings recorded yet/i);
+  assert.match(report.text, /cache warm hits: 1\/1 \(100%\)/i);
+});
+
+test("selectLatestNonWarmCacheDiagnosisFromCacheAudit returns newest non-warm diagnosis details", () => {
+  const result = selectLatestNonWarmCacheDiagnosisFromCacheAudit([
+    makeCacheAuditRecord({
+      cachedInputTokens: 1024,
+      baselineKind: "request_key",
+    }),
+    makeCacheAuditRecord({
+      at: "2026-07-08T10:02:00.000Z",
+      stablePrefixFingerprint: "fp-a",
+      driftReasons: [{ kind: "segment_text_changed", key: "instructions", detail: "changed" }],
+      requestPromptCacheKey: "cache-a",
+      responsePromptCacheKey: "cache-a",
+      cachedInputTokens: 0,
+      baselineKind: "request_key",
+    }),
+  ]);
+
+  assert.equal(result?.matchedResult, "cold miss");
+  assert.equal(result?.driftKeys[0], "instructions");
+  assert.match(result?.optimizationHint ?? "", /(Session-local|Fingerprint drift|Cold start)/i);
 });

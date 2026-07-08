@@ -8,7 +8,6 @@ import { handleVisual as handleSharedVisual } from "@tokenpilot/product-surface"
 import { readLatestUxEffect, readSessionUxAggregate } from "../../../../adapters/openclaw/src/context-stack/integration/ux-effects.js";
 import {
   readRecentOpenClawCacheAuditRecordsForSession,
-  summarizeOpenClawCacheAudit,
 } from "../../../../adapters/openclaw/src/cache-audit.js";
 import { resolveOpenClawConfigPath } from "../../../../adapters/openclaw/src/context-stack/integration/openclaw-paths.js";
 import { openClawProductSurfaceConfigAdapter, resolveStateDir } from "../../../../adapters/openclaw/src/commands/tokenpilot/host-config-adapter.js";
@@ -110,9 +109,8 @@ export function createOpenClawCliBridge(target: {
         },
         readLatestUxEffect,
         readSessionAggregate: readSessionUxAggregate,
-        async readCacheAuditSummary(stateDir, sessionId) {
-          const records = await readRecentOpenClawCacheAuditRecordsForSession(stateDir, sessionId, 64);
-          return records.length > 0 ? summarizeOpenClawCacheAudit(records) : null;
+        async readRecentCacheAuditRecords(stateDir, sessionId) {
+          return readRecentOpenClawCacheAuditRecordsForSession(stateDir, sessionId, 64);
         },
       });
     },
