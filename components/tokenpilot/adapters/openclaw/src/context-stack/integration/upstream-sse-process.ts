@@ -27,7 +27,11 @@ export function processChatCompletionsSseBlock(block: string, state: ChatComplet
   const deltaText = extractChatCompletionDeltaText(choice);
   state.responseId = String(parsed?.id ?? (state.responseId || `resp_${Date.now()}`));
   state.model = String(parsed?.model ?? state.model ?? "");
-  if (parsed?.usage != null) state.usage = parsed.usage;
+  if (parsed?.usage != null) {
+    state.usage = parsed.usage;
+  } else if (parsed?.response?.usage != null) {
+    state.usage = parsed.response.usage;
+  }
 
   const out: string[] = [];
   ensureResponsesSseStarted(state, out);
@@ -70,9 +74,5 @@ export function processChatCompletionsSseBlock(block: string, state: ChatComplet
     }
   }
 
-  const finishReason = choice?.finish_reason;
-  if (finishReason && !state.completed) {
-    out.push(finalizeChatCompletionsResponsesSse(state));
-  }
   return out.join("");
 }

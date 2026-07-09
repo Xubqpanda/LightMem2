@@ -36,3 +36,24 @@ test("openclaw host bridge exposes request/response/stream host views", () => {
   assert.equal(stream.promptCacheKey, "pk-stream-1");
   assert.equal(stream.usage?.input_tokens, 100);
 });
+
+test("openclaw host bridge stream snapshot falls back to response.usage", () => {
+  const bridge = createOpenClawHostBridge({
+    extractInputText: () => "",
+    extractProviderResponseText: (raw: string) => raw.includes("hello") ? "hello" : "",
+    contentToText: (value: unknown) => String(value ?? ""),
+  });
+
+  const stream = bridge.snapshotStream([
+    'data: {"type":"response.completed","response":{"prompt_cache_key":"pk-stream-2","usage":{"input_tokens":90,"output_tokens":8,"input_tokens_details":{"cached_tokens":64}}}}',
+    "data: hello",
+    "",
+  ].join("\n"));
+
+  assert.equal(stream.promptCacheKey, "pk-stream-2");
+  assert.deepEqual(stream.usage, {
+    input_tokens: 90,
+    output_tokens: 8,
+    input_tokens_details: { cached_tokens: 64 },
+  });
+});

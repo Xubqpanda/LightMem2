@@ -1209,3 +1209,24 @@ test("convertChatCompletionsSseToResponsesSse preserves output text and usage in
   assert.match(out, /"output_tokens":12/);
   assert.match(out, /"total_tokens":112/);
 });
+
+test("convertChatCompletionsSseToResponsesSse preserves usage emitted after finish_reason", () => {
+  const rawSse = [
+    'data: {"id":"chatcmpl_2","object":"chat.completion.chunk","created":1780766344,"model":"gpt-5.4-mini","choices":[{"index":0,"delta":{"content":"Hello"}}]}',
+    "",
+    'data: {"id":"chatcmpl_2","object":"chat.completion.chunk","created":1780766344,"model":"gpt-5.4-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+    "",
+    'data: {"id":"chatcmpl_2","object":"chat.completion.chunk","created":1780766344,"model":"gpt-5.4-mini","choices":[],"usage":{"prompt_tokens":222,"completion_tokens":33,"total_tokens":255}}',
+    "",
+    "data: [DONE]",
+    "",
+  ].join("\n");
+
+  const out = hooks.convertChatCompletionsSseToResponsesSse(rawSse);
+
+  assert.match(out, /response\.completed/);
+  assert.match(out, /Hello/);
+  assert.match(out, /"input_tokens":222/);
+  assert.match(out, /"output_tokens":33/);
+  assert.match(out, /"total_tokens":255/);
+});

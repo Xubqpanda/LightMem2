@@ -218,6 +218,7 @@ ensure_plugin_runtime_config() {
   local config_path="${OPENCLAW_CONFIG_PATH:-${HOME}/.openclaw/openclaw.json}"
   local proxy_base_url="${TOKENPILOT_BASE_URL:-}"
   local proxy_api_key="${TOKENPILOT_API_KEY:-}"
+  local proxy_provider_id="${TOKENPILOT_UPSTREAM_PROVIDER:-${PINCHBENCH_MODEL_PROVIDER_PREFIX:-}}"
   local proxy_port="${TOKENPILOT_PROXY_PORT:-17668}"
   local plugin_load_path="${TOKENPILOT_PLUGIN_LOAD_PATH:-${HOME}/.openclaw/extensions/tokenpilot}"
   local proxy_pure_forward="${TOKENPILOT_PROXY_PURE_FORWARD:-false}"
@@ -444,6 +445,10 @@ slots["contextEngine"] = "layered-context"
 tokenpilot_cfg = tokenpilot.setdefault("config", {})
 tokenpilot_cfg["enabled"] = True
 tokenpilot_cfg["proxyAutostart"] = True
+if proxy_provider_id.strip():
+    tokenpilot_cfg["proxyProviderId"] = proxy_provider_id.strip()
+else:
+    tokenpilot_cfg.pop("proxyProviderId", None)
 if proxy_port:
     tokenpilot_cfg["proxyPort"] = proxy_port
 if proxy_base_url:
@@ -1187,6 +1192,8 @@ PY
       OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR}" \
       XDG_CACHE_HOME="${XDG_CACHE_HOME}" \
       XDG_CONFIG_HOME="${XDG_CONFIG_HOME}" \
+      TOKENPILOT_UPSTREAM_PROVIDER="${TOKENPILOT_UPSTREAM_PROVIDER:-${PINCHBENCH_MODEL_PROVIDER_PREFIX:-}}" \
+      LIGHTMEM2_UPSTREAM_PROVIDER="${LIGHTMEM2_UPSTREAM_PROVIDER:-${TOKENPILOT_UPSTREAM_PROVIDER:-${PINCHBENCH_MODEL_PROVIDER_PREFIX:-}}}" \
       GOOGLE_WORKSPACE_CLI_CONFIG_DIR="${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-}" \
       GOOGLE_WORKSPACE_CLI_TOKEN="${GOOGLE_WORKSPACE_CLI_TOKEN:-}" \
       HTTPS_PROXY="${HTTPS_PROXY:-}" \
@@ -1224,6 +1231,8 @@ PY
       OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR}" \
       XDG_CACHE_HOME="${XDG_CACHE_HOME}" \
       XDG_CONFIG_HOME="${XDG_CONFIG_HOME}" \
+      TOKENPILOT_UPSTREAM_PROVIDER="${TOKENPILOT_UPSTREAM_PROVIDER:-${PINCHBENCH_MODEL_PROVIDER_PREFIX:-}}" \
+      LIGHTMEM2_UPSTREAM_PROVIDER="${LIGHTMEM2_UPSTREAM_PROVIDER:-${TOKENPILOT_UPSTREAM_PROVIDER:-${PINCHBENCH_MODEL_PROVIDER_PREFIX:-}}}" \
       GOOGLE_WORKSPACE_CLI_CONFIG_DIR="${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-}" \
       GOOGLE_WORKSPACE_CLI_TOKEN="${GOOGLE_WORKSPACE_CLI_TOKEN:-}" \
       HTTPS_PROXY="${HTTPS_PROXY:-}" \

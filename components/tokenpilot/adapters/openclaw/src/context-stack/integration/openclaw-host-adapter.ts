@@ -213,6 +213,14 @@ export function createOpenClawStreamCodec(deps: {
           const candidate = parsed?.usage;
           if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
             usage = candidate as Record<string, unknown>;
+            continue;
+          }
+          const nestedCandidate =
+            parsed?.response && typeof parsed.response === "object"
+              ? (parsed.response as Record<string, unknown>)?.usage
+              : undefined;
+          if (nestedCandidate && typeof nestedCandidate === "object" && !Array.isArray(nestedCandidate)) {
+            usage = nestedCandidate as Record<string, unknown>;
           }
         } catch {
           // ignore malformed stream frames
