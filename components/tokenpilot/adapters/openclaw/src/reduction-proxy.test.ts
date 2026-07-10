@@ -1205,24 +1205,42 @@ test("chatCompletionsToResponsesText converts tool calls back into responses out
   assert.equal(out.output[0].call_id, "call_read_2");
   assert.equal(out.output[0].name, "read");
   assert.equal(out.output[0].arguments, "{\"path\":\"/tmp/docs/README.md\"}");
-  assert.deepEqual(out.usage, {
-    input_tokens: 100,
-    cache_read_input_tokens: 64,
+  assert.equal(out.usage?.input_tokens, 100);
+  assert.equal(out.usage?.inputTokens, 100);
+  assert.equal(out.usage?.cache_read_input_tokens, 64);
+  assert.equal(out.usage?.cacheReadTokens, 64);
+  assert.equal(out.usage?.cacheRead, 64);
+  assert.equal(out.usage?.cached_tokens, 64);
+  assert.equal(out.usage?.cachedTokens, 64);
+  assert.equal(out.usage?.output_tokens, 12);
+  assert.equal(out.usage?.outputTokens, 12);
+  assert.equal(out.usage?.total_tokens, 112);
+  assert.equal(out.usage?.totalTokens, 112);
+  assert.equal(out.usage?.cache_write_tokens, 0);
+  assert.equal(out.usage?.cacheWriteTokens, 0);
+  assert.equal(out.usage?.cacheWrite, 0);
+  assert.deepEqual(out.usage?.input_tokens_details, {
     cached_tokens: 64,
-    input_tokens_details: {
-      cached_tokens: 64,
-    },
-    output_tokens: 12,
-    output_tokens_details: {
-      reasoning_tokens: 0,
-    },
-    total_tokens: 112,
+  });
+  assert.deepEqual(out.usage?.output_tokens_details, {
+    reasoning_tokens: 0,
+  });
+  assert.deepEqual(out.usage?.prompt_tokens_details, {
+    cached_tokens: 64,
+  });
+  assert.deepEqual(out.usage?.completion_tokens_details, {
+    reasoning_tokens: 0,
+  });
+  assert.deepEqual(out.usage?.providerRaw, {
+    prompt_tokens: 100,
     prompt_tokens_details: {
       cached_tokens: 64,
     },
+    completion_tokens: 12,
     completion_tokens_details: {
       reasoning_tokens: 0,
     },
+    total_tokens: 112,
   });
 });
 
