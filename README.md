@@ -642,6 +642,13 @@ We welcome bug fixes, host adapter improvements, onboarding fixes, tests, and do
 </a>
 
 We thank all the contributors to this project, more contributors are welcome!
+
+### 📚 Our LightMem Series
+This repository belongs to ZJU NLP LightMem lightweight agent memory series, focusing on solving context bloat, excessive token consumption and low cache utilization for long-running LLM agents:
+- [LightMem](https://github.com/zjunlp/LightMem.git) — ICLR 2026 lightweight memory-augmented generation baseline, core hierarchical memory paradigm
+- [LightMem2](https://github.com/zjunlp/LightMem2) — This repo, multi-host runtime framework with TokenPilot for code agents
+- [LightMem-Ego](https://github.com/zjunlp/LightMem-Ego) — Temporal memory extension for embodied & ego-centric autonomous agents
+
 #### Other Related Projects
 
 - [LLMLingua-2](https://github.com/microsoft/LLMLingua) — Token-level prompt compression
