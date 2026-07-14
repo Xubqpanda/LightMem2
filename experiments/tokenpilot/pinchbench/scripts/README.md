@@ -77,6 +77,15 @@ Reliability controls for isolated or parallel workers include:
 - `PINCHBENCH_TRANSIENT_PROVIDER_RETRY_BASE_DELAY_S`: exponential retry base delay, default `2.0`
 - `TOKENPILOT_UPSTREAM_DNS_OVERRIDE=host=address`: optional explicit DNS mapping for a broken upstream resolver path
 
+Run the harness regression tests from the repository root with:
+
+```bash
+uv run --with pyyaml --with python-dotenv \
+  python -m unittest discover \
+  -s experiments/tokenpilot/pinchbench/dataset/tests \
+  -p 'test_*.py'
+```
+
 If you want to use unprefixed model aliases such as `gpt-5.4-mini`, also set:
 
 - `PINCHBENCH_MODEL_PROVIDER_PREFIX`
