@@ -537,8 +537,15 @@ def _select_tasks(tasks: List[Task], suite: str, policy: Dict[str, Any]) -> List
     if suite == "automated-only":
         return [task for task in _apply_local_dataset_policy(tasks, policy) if task.grading_type == "automated"]
 
-    explicit_ids = {task_id.strip() for task_id in suite.split(",") if task_id.strip()}
-    return [task for task in tasks if task.task_id in explicit_ids]
+    # An explicit suite is also its execution order. This matters for mixed
+    # continuous streams, where a set-based manifest-order filter silently
+    # turns a shuffled sequence back into category-correlated ordering.
+    explicit_ids = [task_id.strip() for task_id in suite.split(",") if task_id.strip()]
+    by_id = {task.task_id: task for task in tasks}
+    missing = [task_id for task_id in explicit_ids if task_id not in by_id]
+    if missing:
+        logger.warning("Ignoring %s unknown suite task ids: %s", len(missing), ", ".join(missing))
+    return [by_id[task_id] for task_id in explicit_ids if task_id in by_id]
 
 
 def _next_run_id(run_root: Path) -> str:
