@@ -4,7 +4,7 @@ import {
   prependTextToContent,
   replaceContentText,
   rewriteTextForStablePrefix,
-} from "@tokenpilot/host-adapter";
+} from "@tokenpilot/stabilizer";
 
 export type RootPromptRewrite = {
   canonicalPromptText: string;

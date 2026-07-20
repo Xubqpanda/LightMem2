@@ -7,10 +7,10 @@ import {
 } from "./recovery.js";
 import {
   prepareStablePrefixEnvelope,
-} from "./stable-prefix.js";
+} from "@tokenpilot/stabilizer";
 import {
   canonicalizeEnvelopeTools,
-} from "./tools.js";
+} from "@tokenpilot/stabilizer";
 import type {
   BeforeCallDiagnostics,
   HostPipelineConfig,

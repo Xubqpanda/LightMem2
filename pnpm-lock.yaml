@@ -38,6 +38,9 @@ importers:
       '@tokenpilot/runtime-core':
         specifier: workspace:*
         version: link:../../packages/runtime-core
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../../packages/features/stabilizer
     devDependencies:
       esbuild:
         specifier: ^0.25.10
@@ -69,6 +72,9 @@ importers:
       '@tokenpilot/runtime-core':
         specifier: workspace:*
         version: link:../../packages/runtime-core
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../../packages/features/stabilizer
     devDependencies:
       esbuild:
         specifier: ^0.25.10
@@ -103,6 +109,9 @@ importers:
       '@tokenpilot/runtime-core':
         specifier: workspace:*
         version: link:../../packages/runtime-core
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../../packages/features/stabilizer
     devDependencies:
       esbuild:
         specifier: ^0.25.10
@@ -114,11 +123,20 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  components/tokenpilot/packages/features/stabilizer:
+    dependencies:
+      '@tokenpilot/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+
   components/tokenpilot/packages/host-adapter:
     dependencies:
       '@tokenpilot/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../features/stabilizer
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
@@ -157,6 +175,9 @@ importers:
       '@tokenpilot/runtime-core':
         specifier: workspace:*
         version: link:../runtime-core
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../features/stabilizer
 
   components/tokenpilot/packages/runtime-core:
     dependencies:
@@ -178,6 +199,9 @@ importers:
       '@tokenpilot/product-surface':
         specifier: workspace:*
         version: link:../../packages/product-surface
+      '@tokenpilot/stabilizer':
+        specifier: workspace:*
+        version: link:../../packages/features/stabilizer
     devDependencies:
       esbuild:
         specifier: ^0.25.10

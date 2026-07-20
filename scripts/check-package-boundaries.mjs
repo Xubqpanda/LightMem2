@@ -14,7 +14,11 @@ const allowedDependencies = {
 };
 
 // Remove each exception as its implementation moves to the correct owner.
-const knownBoundaryDebt = new Set(["@tokenpilot/runtime-core -> @tokenpilot/decision"]);
+const knownBoundaryDebt = new Set([
+  "@tokenpilot/host-adapter -> @tokenpilot/stabilizer",
+  "@tokenpilot/product-surface -> @tokenpilot/stabilizer",
+  "@tokenpilot/runtime-core -> @tokenpilot/decision",
+]);
 
 async function findPackageFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

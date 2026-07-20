@@ -1,5 +1,5 @@
 import type { SerializedStablePrefixContract } from "./stable-prefix-contract.js";
-import { canonicalizeTools } from "../pipeline/tools.js";
+import { canonicalizeTools } from "./tools.js";
 
 export type StablePrefixEntropyKind =
   | "timestamp"

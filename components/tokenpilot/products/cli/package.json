@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@tokenpilot/host-adapter": "workspace:*",
-    "@tokenpilot/product-surface": "workspace:*"
+    "@tokenpilot/product-surface": "workspace:*",
+    "@tokenpilot/stabilizer": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.25.10",

@@ -1,21 +1,19 @@
 {
-  "name": "@tokenpilot/host-adapter",
+  "name": "@tokenpilot/stabilizer",
   "version": "0.1.0",
   "private": true,
   "lightmem2": {
-    "role": "foundation"
+    "role": "feature"
   },
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "dependencies": {
-    "@tokenpilot/kernel": "workspace:*",
-    "@tokenpilot/stabilizer": "workspace:*",
-    "js-tiktoken": "^1.0.21"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@tokenpilot/kernel": "workspace:*"
   }
 }

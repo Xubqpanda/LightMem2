@@ -6,11 +6,11 @@ import {
   extractStablePrefixContract,
   fingerprintStablePrefixEnvelope,
   serializeStablePrefixContract,
-} from "../contracts/stable-prefix-contract.js";
+} from "@tokenpilot/stabilizer";
 import {
   auditStablePrefixEntropy,
   diffStablePrefixSerialized,
-} from "../contracts/stable-prefix-audit.js";
+} from "@tokenpilot/stabilizer";
 import type { HostRequestEnvelope } from "../model/host-request.js";
 
 export type CacheAuditBaselineKind = "identity" | "request_key" | "session" | "none";

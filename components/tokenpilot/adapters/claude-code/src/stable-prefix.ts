@@ -3,8 +3,8 @@ import {
   applyStablePrefixToInstructions,
   extractContentText,
   replaceContentText,
-  type HostRequestEnvelope,
-} from "@tokenpilot/host-adapter";
+} from "@tokenpilot/stabilizer";
+import type { HostRequestEnvelope } from "@tokenpilot/host-adapter";
 import type { TokenPilotClaudeCodeConfig } from "./config.js";
 
 function computeStablePromptCacheKey(model: string, stableTexts: string[]): string {

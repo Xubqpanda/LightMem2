@@ -1,5 +1,5 @@
 import type { HostRequestEnvelope } from "../model/host-request.js";
-import { extractContentText, replaceContentText } from "./message-text.js";
+import { extractContentText, replaceContentText } from "@tokenpilot/stabilizer";
 
 export const DEFAULT_RECOVERY_TOOL_NAME = "memory_fault_recover";
 

@@ -5,8 +5,8 @@ import {
   extractContentText,
   findFirstUserMessageIndex,
   rewriteTextForStablePrefix,
-  type HostRequestEnvelope,
-} from "@tokenpilot/host-adapter";
+} from "@tokenpilot/stabilizer";
+import type { HostRequestEnvelope } from "@tokenpilot/host-adapter";
 import type { TokenPilotCodexConfig } from "./config.js";
 
 function computeStablePromptCacheKey(model: string, stableTexts: string[]): string {

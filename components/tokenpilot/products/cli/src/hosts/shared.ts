@@ -4,7 +4,8 @@ import type {
   TokenPilotProductCommandResult,
   TokenPilotProductSurfaceHostBridge,
 } from "@tokenpilot/host-adapter";
-import { diagnoseCacheAudit, summarizeCacheAudit } from "@tokenpilot/host-adapter";
+import { summarizeCacheAudit } from "@tokenpilot/host-adapter";
+import { diagnoseCacheAudit } from "@tokenpilot/stabilizer";
 import {
   buildSessionReportText,
   createProductSurfaceCommandHandler,

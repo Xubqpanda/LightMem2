@@ -1,13 +1,12 @@
 import { readdir, readFile, mkdir, appendFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
-  diagnoseCacheAudit,
   readRecentCacheAuditRecordsForSession,
   summarizeCacheAudit,
   type CacheAuditRecord,
-  type CacheAuditDiagnosis,
   type CacheAuditSummary,
 } from "@tokenpilot/host-adapter";
+import { diagnoseCacheAudit, type CacheAuditDiagnosis } from "@tokenpilot/stabilizer";
 import { readRecentReductionMetrics, summarizeRecentReductionMetrics, type RecentReductionMetricsSummary } from "../metrics.js";
 import {
   listSessionModuleObservationSummaries,

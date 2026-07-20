@@ -1,10 +1,10 @@
-import type { HostRequestEnvelope } from "../model/host-request.js";
+import type { StabilizerRequestEnvelope } from "./contracts.js";
 import {
   extractContentText,
   normalizeStablePrefixText,
   rewriteTextForStablePrefix,
-} from "../pipeline/message-text.js";
-import { canonicalizeTools } from "../pipeline/tools.js";
+} from "./message-text.js";
+import { canonicalizeTools } from "./tools.js";
 import { createHash } from "node:crypto";
 
 export type StablePrefixLayer = "stable_core" | "semi_stable_context" | "volatile_tail";
@@ -95,7 +95,7 @@ function sortJsonValue(value: unknown, context?: StablePrefixNormalizationContex
 }
 
 export function extractStablePrefixContract(
-  envelope: HostRequestEnvelope,
+  envelope: StabilizerRequestEnvelope,
 ): StablePrefixContract {
   const stableCore: StablePrefixSegment[] = [];
   const semiStableContext: StablePrefixSegment[] = [];
@@ -208,7 +208,7 @@ export function serializeStablePrefixContract(
 }
 
 export function serializeStablePrefixEnvelope(
-  envelope: HostRequestEnvelope,
+  envelope: StabilizerRequestEnvelope,
 ): SerializedStablePrefixContract {
   return serializeStablePrefixContract(extractStablePrefixContract(envelope));
 }
@@ -222,7 +222,7 @@ export function fingerprintStablePrefixContract(
 }
 
 export function fingerprintStablePrefixEnvelope(
-  envelope: HostRequestEnvelope,
+  envelope: StabilizerRequestEnvelope,
 ): string {
   return fingerprintStablePrefixContract(extractStablePrefixContract(envelope));
 }

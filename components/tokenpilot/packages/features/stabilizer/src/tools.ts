@@ -1,4 +1,4 @@
-import type { HostRequestEnvelope } from "../model/host-request.js";
+import type { StabilizerRequestEnvelope } from "./contracts.js";
 
 function stableSortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableSortJsonValue);
@@ -38,7 +38,9 @@ export function canonicalizeTools(tools: unknown[] | undefined): unknown[] | und
     .sort((a, b) => toolSortKey(a).localeCompare(toolSortKey(b)));
 }
 
-export function canonicalizeEnvelopeTools(envelope: HostRequestEnvelope): HostRequestEnvelope {
+export function canonicalizeEnvelopeTools<TEnvelope extends StabilizerRequestEnvelope>(
+  envelope: TEnvelope,
+): TEnvelope {
   if (!Array.isArray(envelope.tools) || envelope.tools.length === 0) return envelope;
   const canonicalTools = canonicalizeTools(envelope.tools);
   const before = JSON.stringify(envelope.tools);
@@ -47,5 +49,5 @@ export function canonicalizeEnvelopeTools(envelope: HostRequestEnvelope): HostRe
   return {
     ...envelope,
     tools: canonicalTools,
-  };
+  } as TEnvelope;
 }

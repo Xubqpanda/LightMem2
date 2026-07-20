@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { diagnoseCacheAudit } from "../src/state/cache-audit-diagnosis.js";
+import { diagnoseCacheAudit } from "../src/cache-audit-diagnosis.js";
 
 test("diagnoseCacheAudit returns actionable cold-miss guidance", () => {
   const diagnosis = diagnoseCacheAudit({

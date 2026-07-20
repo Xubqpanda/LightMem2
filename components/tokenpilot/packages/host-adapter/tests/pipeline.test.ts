@@ -9,24 +9,20 @@ import { prepareBeforeCall } from "../src/pipeline/before-call.js";
 import { prepareBeforeCallWithReductionSummary } from "../src/pipeline/before-call-shared.js";
 import { runBeforeCallReductionOrchestrator } from "../src/pipeline/reduction-orchestrator.js";
 import { stripInternalPayloadFields } from "../src/pipeline/recovery.js";
-import { prependTextToContent } from "../src/pipeline/message-text.js";
-import { rewriteTextForStablePrefix } from "../src/pipeline/message-text.js";
 import {
   applyStablePrefixToInstructions,
   applyStablePrefixToMessage,
-} from "../src/pipeline/stable-prefix.js";
-import { canonicalizeTools } from "../src/pipeline/tools.js";
-import { extractStablePrefixContract } from "../src/contracts/stable-prefix-contract.js";
-import {
-  fingerprintStablePrefixEnvelope,
-  serializeStablePrefixEnvelope,
-} from "../src/contracts/stable-prefix-contract.js";
-import {
   auditStablePrefixEntropy,
+  canonicalizeTools,
   diffStablePrefixSerialized,
-} from "../src/contracts/stable-prefix-audit.js";
-import type { SerializedStablePrefixContract } from "../src/contracts/stable-prefix-contract.js";
-import { normalizeStablePrefixText } from "../src/pipeline/message-text.js";
+  extractStablePrefixContract,
+  fingerprintStablePrefixEnvelope,
+  normalizeStablePrefixText,
+  prependTextToContent,
+  rewriteTextForStablePrefix,
+  serializeStablePrefixEnvelope,
+  type SerializedStablePrefixContract,
+} from "@tokenpilot/stabilizer";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

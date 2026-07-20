@@ -1,4 +1,4 @@
-import type { HostRequestEnvelope } from "../model/host-request.js";
+import type { StabilizerRequestEnvelope } from "./contracts.js";
 import {
   extractContentText,
   normalizeUserMessageText,
@@ -7,15 +7,15 @@ import {
   rewriteTextForStablePrefix,
 } from "./message-text.js";
 
-export function findFirstUserMessageIndex(messages: HostRequestEnvelope["messages"]): number {
+export function findFirstUserMessageIndex(messages: StabilizerRequestEnvelope["messages"]): number {
   return messages.findIndex((message) => message?.role === "user");
 }
 
-export function applyStablePrefixToInstructions(params: {
-  envelope: HostRequestEnvelope;
+export function applyStablePrefixToInstructions<TEnvelope extends StabilizerRequestEnvelope>(params: {
+  envelope: TEnvelope;
   dynamicContextTarget?: "developer" | "user";
   mergeDynamicContextIntoInstructions?: boolean;
-}): HostRequestEnvelope {
+}): TEnvelope {
   const {
     envelope,
     dynamicContextTarget = "user",
@@ -57,15 +57,15 @@ export function applyStablePrefixToInstructions(params: {
     ...envelope,
     instructions: nextInstructions,
     messages: nextMessages,
-  };
+  } as TEnvelope;
 }
 
-export function applyStablePrefixToMessage(params: {
-  envelope: HostRequestEnvelope;
+export function applyStablePrefixToMessage<TEnvelope extends StabilizerRequestEnvelope>(params: {
+  envelope: TEnvelope;
   messageIndex: number;
   dynamicContextTarget?: "developer" | "user";
   mergeDynamicContextIntoMessage?: boolean;
-}): HostRequestEnvelope {
+}): TEnvelope {
   const {
     envelope,
     messageIndex,
@@ -113,11 +113,11 @@ export function applyStablePrefixToMessage(params: {
   return {
     ...envelope,
     messages: nextMessages,
-  };
+  } as TEnvelope;
 }
 
-function rewriteInstructions(
-  envelope: HostRequestEnvelope,
+function rewriteInstructions<TEnvelope extends StabilizerRequestEnvelope>(
+  envelope: TEnvelope,
 ): {
   changed: boolean;
   instructions: string | undefined;
@@ -146,9 +146,9 @@ function rewriteInstructions(
   };
 }
 
-function rewriteSystemMessage(messages: HostRequestEnvelope["messages"]): {
+function rewriteSystemMessage(messages: StabilizerRequestEnvelope["messages"]): {
   changed: boolean;
-  messages: HostRequestEnvelope["messages"];
+  messages: StabilizerRequestEnvelope["messages"];
   dynamicContextText: string;
 } {
   const systemIndex = messages.findIndex((message) => message?.role === "system");
@@ -176,9 +176,9 @@ function rewriteSystemMessage(messages: HostRequestEnvelope["messages"]): {
   };
 }
 
-function normalizeUserMessages(messages: HostRequestEnvelope["messages"]): {
+function normalizeUserMessages(messages: StabilizerRequestEnvelope["messages"]): {
   changed: boolean;
-  messages: HostRequestEnvelope["messages"];
+  messages: StabilizerRequestEnvelope["messages"];
 } {
   let changed = false;
   const nextMessages = messages.map((message) => {
@@ -197,11 +197,11 @@ function normalizeUserMessages(messages: HostRequestEnvelope["messages"]): {
 }
 
 function injectDynamicContext(
-  messages: HostRequestEnvelope["messages"],
+  messages: StabilizerRequestEnvelope["messages"],
   dynamicContextText: string,
 ): {
   changed: boolean;
-  messages: HostRequestEnvelope["messages"];
+  messages: StabilizerRequestEnvelope["messages"];
 } {
   if (!dynamicContextText.trim()) return { changed: false, messages };
   const userIndex = messages.findIndex((message) => message?.role === "user");
@@ -219,9 +219,9 @@ function injectDynamicContext(
   return { changed: true, messages: nextMessages };
 }
 
-export function defaultPrepareStablePrefix(
-  envelope: HostRequestEnvelope,
-): HostRequestEnvelope {
+export function defaultPrepareStablePrefix<TEnvelope extends StabilizerRequestEnvelope>(
+  envelope: TEnvelope,
+): TEnvelope {
   const instructionRewrite = rewriteInstructions(envelope);
   const sourceMessages = instructionRewrite.changed ? envelope.messages : envelope.messages;
   const systemRewrite = instructionRewrite.changed
@@ -249,13 +249,13 @@ export function defaultPrepareStablePrefix(
     ...envelope,
     instructions: nextInstructions,
     messages: dynamicInjection.messages,
-  };
+  } as TEnvelope;
 }
 
-export function prepareStablePrefixEnvelope(
-  envelope: HostRequestEnvelope,
-  transform?: (envelope: HostRequestEnvelope) => HostRequestEnvelope,
-): { envelope: HostRequestEnvelope; applied: boolean } {
+export function prepareStablePrefixEnvelope<TEnvelope extends StabilizerRequestEnvelope>(
+  envelope: TEnvelope,
+  transform?: (envelope: TEnvelope) => TEnvelope,
+): { envelope: TEnvelope; applied: boolean } {
   const next = (transform ?? defaultPrepareStablePrefix)(envelope);
   return { envelope: next, applied: next !== envelope };
 }

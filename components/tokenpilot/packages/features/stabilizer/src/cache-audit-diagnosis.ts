@@ -1,7 +1,7 @@
 import type {
   StablePrefixDriftReason,
   StablePrefixEntropyFinding,
-} from "../contracts/stable-prefix-audit.js";
+} from "./stable-prefix-audit.js";
 
 export type CacheAuditDiagnosisInput = {
   stablePrefixFingerprint?: string | null;

@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
 import {
-  extractContentText,
   prepareBeforeCallWithReductionSummary,
   recordUxEffect,
   type HostPayloadCodec,
   type HostRequestEnvelope,
   type PreparedBeforeCallResult,
   type TokenPilotUxCountMode,
-  rewriteTextForStablePrefix,
 } from "@tokenpilot/host-adapter";
+import { extractContentText, rewriteTextForStablePrefix } from "@tokenpilot/stabilizer";
 import {
   appendReductionVisualSnapshot,
   appendStabilityVisualSnapshot,
