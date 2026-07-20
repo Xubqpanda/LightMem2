@@ -2,6 +2,9 @@
   "name": "@tokenpilot/claude-code-adapter",
   "version": "0.1.0",
   "description": "TokenPilot adapter for Claude Code via an Anthropic-compatible gateway.",
+  "lightmem2": {
+    "role": "adapter"
+  },
   "main": "dist/index.js",
   "license": "MIT",
   "repository": {

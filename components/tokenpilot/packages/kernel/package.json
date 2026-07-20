@@ -2,6 +2,9 @@
     "name":  "@tokenpilot/kernel",
     "version":  "0.1.0",
     "private":  true,
+    "lightmem2":  {
+                       "role":  "foundation"
+                   },
     "type":  "module",
     "main":  "src/index.ts",
     "types":  "src/index.ts",

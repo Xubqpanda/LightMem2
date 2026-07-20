@@ -6,6 +6,8 @@
     "scripts": {
         "build": "pnpm -r build",
         "typecheck": "pnpm -r typecheck",
+        "check:boundaries": "node scripts/check-package-boundaries.mjs",
+        "graph:packages": "node scripts/check-package-boundaries.mjs --graph",
         "lightmem2:build": "npm --prefix components/tokenpilot/products/cli run build",
         "lightmem2:install": "npm --prefix components/tokenpilot/products/cli run install:bin",
         "lightmem2:typecheck": "npm --prefix components/tokenpilot/products/cli run typecheck",

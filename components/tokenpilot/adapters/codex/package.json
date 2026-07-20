@@ -2,6 +2,9 @@
   "name": "@tokenpilot/codex-adapter",
   "version": "0.1.0",
   "description": "TokenPilot adapter for Codex via an OpenAI-compatible Responses proxy.",
+  "lightmem2": {
+    "role": "adapter"
+  },
   "main": "dist/index.js",
   "bin": {
     "tokenpilot-codex": "dist/cli.js"

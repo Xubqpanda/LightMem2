@@ -2,6 +2,9 @@
   "name": "@tokenpilot/cli",
   "version": "0.1.0",
   "private": true,
+  "lightmem2": {
+    "role": "product"
+  },
   "type": "commonjs",
   "main": "dist/cli.js",
   "bin": {

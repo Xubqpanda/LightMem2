@@ -2,6 +2,9 @@
   "name": "tokenpilot",
   "version": "0.1.0",
   "description": "TokenPilot plugin for OpenClaw: routing hooks and token-efficiency runtime controls.",
+  "lightmem2": {
+    "role": "adapter"
+  },
   "main": "dist/index.js",
   "license": "MIT",
   "repository": {
