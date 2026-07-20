@@ -185,8 +185,82 @@ for (const combination of MODULE_COMBINATIONS) {
       assert.equal(prepared.reductionApplied.changedBlocks > 0, combination.enablement.reduction);
       assert.ok(payloadChanges.length > 0);
       assert.ok(stateChanges.some(({ path }) => path === "tokenpilot/proxy-requests.jsonl"));
-      assert.ok(effects.stabilizer.traces.length > 0);
+      assert.equal(effects.stabilizer.traces.length > 0, combination.enablement.stabilizer);
+      assert.equal(
+        stateChanges.some(({ path }) => path === `tokenpilot/visual/stability/session-${combination.id}.jsonl`),
+        combination.enablement.stabilizer,
+      );
       assert.ok(effects.reduction.traces.length > 0);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const combination of MODULE_COMBINATIONS.filter(({ enablement }) => !enablement.stabilizer)) {
+  test(`stabilizer-disabled ${combination.id} preserves prefix-owned request fields`, async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), `tokenpilot-prefix-disabled-${combination.id}-`));
+    try {
+      const cfg = __testHooks.normalizeConfig({
+        stateDir,
+        ...buildModuleCombinationConfig(combination.enablement),
+        memory: { enabled: false },
+        reduction: {
+          triggerMinChars: 256,
+          maxToolChars: 256,
+          passes: { toolPayloadTrim: true },
+        },
+      });
+      const payload: any = {
+        ...createRequestPayload(),
+        prompt_cache_retention: "inbound-retention",
+        tools: [
+          { type: "function", function: { name: "z_tool", parameters: { z: 1, a: 2 } } },
+          { type: "function", function: { name: "a_tool", parameters: { b: true, a: false } } },
+        ],
+      };
+      const originalDeveloper = structuredClone(payload.input[0]);
+      const originalUser = structuredClone(payload.input[1]);
+      const originalTools = structuredClone(payload.tools);
+      const traceStages: string[] = [];
+
+      const prepared = await __testHooks.prepareProxyRequest({
+        cfg,
+        payload,
+        resolveSessionIdForPayload: () => `session-prefix-disabled-${combination.id}`,
+        policyModule: {
+          async beforeBuild(turnCtx: any) {
+            return turnCtx;
+          },
+        },
+        helpers: {
+          appendTaskStateTrace: async (_stateDir: string, record: any) => {
+            traceStages.push(String(record.stage ?? ""));
+          },
+        },
+        logger: {
+          info: () => undefined,
+          warn: () => undefined,
+          error: () => undefined,
+          debug: () => undefined,
+        },
+      });
+      const state = await snapshotStateDirectory(stateDir);
+      const developerMessages = prepared.payload.input.filter((item: any) => item?.role === "developer");
+      const userMessages = prepared.payload.input.filter((item: any) => item?.role === "user");
+
+      assert.deepEqual(developerMessages, [originalDeveloper]);
+      assert.deepEqual(userMessages, [originalUser]);
+      assert.deepEqual(prepared.payload.tools, originalTools);
+      assert.equal(prepared.payload.prompt_cache_key, "inbound-cache-key");
+      assert.equal(prepared.payload.prompt_cache_retention, "inbound-retention");
+      assert.equal(prepared.requestEnvelope.metadata?.promptCacheKey, "inbound-cache-key");
+      assert.equal(prepared.requestEnvelope.metadata?.promptCacheRetention, "inbound-retention");
+      assert.equal(traceStages.includes("stable_prefix_rewrite"), false);
+      assert.equal(
+        `tokenpilot/visual/stability/session-prefix-disabled-${combination.id}.jsonl` in state,
+        false,
+      );
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

@@ -277,6 +277,7 @@ export async function prepareProxyRequest(args: {
     syncOpenClawPayloadFromEnvelope(payload, requestEnvelope, payloadCodec);
   }
   const proxyPureForward = cfg.proxyMode.pureForward;
+  const stabilizerEnabled = !proxyPureForward && Boolean(cfg.modules.stabilizer);
   const reductionTriggerMinChars = Math.max(256, cfg.reduction.triggerMinChars ?? 2200);
   const reductionMaxToolChars = Math.max(256, cfg.reduction.maxToolChars ?? 1200);
   const resolvedSessionId = String(requestEnvelope.session.sessionId ?? "proxy-session").trim() || "proxy-session";
@@ -291,10 +292,10 @@ export async function prepareProxyRequest(args: {
     }
   }
   const instructions = helpers.normalizeText(String(requestEnvelope.instructions ?? payload?.instructions ?? ""));
-  const devAndUser = !proxyPureForward ? helpers.findDeveloperAndPrimaryUser(requestEnvelope.messages) : null;
-  const rootPromptCandidate = !proxyPureForward ? helpers.findRootPromptCandidate(requestEnvelope.messages) : null;
+  const devAndUser = stabilizerEnabled ? helpers.findDeveloperAndPrimaryUser(requestEnvelope.messages) : null;
+  const rootPromptCandidate = stabilizerEnabled ? helpers.findRootPromptCandidate(requestEnvelope.messages) : null;
   const firstTurnCandidate = Boolean(devAndUser);
-  const rootPromptRewrite = rootPromptCandidate && !proxyPureForward
+  const rootPromptRewrite = rootPromptCandidate && stabilizerEnabled
     ? helpers.rewriteRootPromptForStablePrefix(rootPromptCandidate.text)
     : null;
   const developerCanonicalText = String(rootPromptRewrite?.canonicalPromptText ?? rootPromptCandidate?.text ?? "");
@@ -304,7 +305,7 @@ export async function prepareProxyRequest(args: {
     : typeof payload?.prompt_cache_key === "string" && payload.prompt_cache_key.trim().length > 0
       ? String(payload.prompt_cache_key)
       : "";
-  if (!proxyPureForward && devAndUser && rootPromptRewrite && Array.isArray(requestEnvelope.messages) && devAndUser.developerIndex >= 0) {
+  if (stabilizerEnabled && devAndUser && rootPromptRewrite && Array.isArray(requestEnvelope.messages) && devAndUser.developerIndex >= 0) {
     const nextMessages = requestEnvelope.messages.slice();
     const forwardedDeveloperText = rootPromptRewrite.forwardedPromptText;
     nextMessages[devAndUser.developerIndex] = {
@@ -339,7 +340,7 @@ export async function prepareProxyRequest(args: {
       }
     }
   }
-  const stableRewrite = !proxyPureForward
+  const stableRewrite = stabilizerEnabled
     ? helpers.rewritePayloadForStablePrefix(payload, model, {
       dynamicContextTarget,
       developerTextForKeyOverride: developerCanonicalText,
@@ -368,7 +369,7 @@ export async function prepareProxyRequest(args: {
       helpers,
     })
     : { injected: false, hitCount: 0 };
-  if (!proxyPureForward && cfg.stateDir) {
+  if (stabilizerEnabled && cfg.stateDir) {
     await helpers.appendTaskStateTrace(cfg.stateDir, {
       stage: "stable_prefix_rewrite",
       sessionId: resolvedSessionId,
@@ -435,7 +436,7 @@ export async function prepareProxyRequest(args: {
       metadata: {
         ...(requestEnvelope.metadata ?? {}),
         promptCacheKey: String(stableRewrite.promptCacheKey ?? ""),
-        promptCacheRetention: "24h",
+        ...(stabilizerEnabled ? { promptCacheRetention: "24h" } : {}),
       },
     };
     payload.__tokenpilot_reduction_applied = true;
@@ -470,9 +471,9 @@ export async function prepareProxyRequest(args: {
     firstTurnCandidate,
     originalPromptCacheKey,
     dynamicContextTarget,
-    shouldRecordStability: !proxyPureForward && Boolean(cfg.stateDir) && Boolean(devAndUser),
+    shouldRecordStability: stabilizerEnabled && Boolean(cfg.stateDir) && Boolean(devAndUser),
   });
-  payload.prompt_cache_retention = "24h";
+  if (stabilizerEnabled) payload.prompt_cache_retention = "24h";
   const cacheAuditSnapshot = buildOpenClawCacheAuditSnapshot({
     envelope: requestEnvelope,
     sessionId: resolvedSessionId,
