@@ -10,6 +10,7 @@ import {
 } from "@tokenpilot/host-adapter";
 import { readRecentReductionMetrics, summarizeRecentReductionMetrics, type RecentReductionMetricsSummary } from "../metrics.js";
 import {
+  listSessionModuleObservationSummaries,
   readSessionModuleObservationSummary,
   type SessionModuleObservationSummary,
 } from "../module-observability.js";
@@ -434,10 +435,6 @@ function snapshotDirCandidates(stateDir: string, kind: "stability" | "reduction"
   return pluginStateSubdirCandidates(stateDir, "visual", kind);
 }
 
-function moduleObservationDirCandidates(stateDir: string): string[] {
-  return pluginStateSubdirCandidates(stateDir, "module-observability");
-}
-
 function parseJsonlLines<T>(raw: string): T[] {
   const out: T[] = [];
   for (const line of raw.split(/\r?\n/)) {
@@ -495,21 +492,6 @@ async function listSnapshotFiles(stateDir: string, kind: "stability" | "reductio
       return entries
         .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
         .map((entry) => entry.name)
-        .sort();
-    } catch {
-      // try next candidate
-    }
-  }
-  return [];
-}
-
-async function listModuleObservationFiles(stateDir: string): Promise<string[]> {
-  for (const dir of moduleObservationDirCandidates(stateDir)) {
-    try {
-      const entries = await readdir(dir, { withFileTypes: true });
-      return entries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-        .map((entry) => join(dir, entry.name))
         .sort();
     } catch {
       // try next candidate
@@ -624,7 +606,7 @@ export async function readVisualSessionListWithOptions(
   const stabilityFiles = await listSnapshotFiles(stateDir, "stability");
   const reductionFiles = await listSnapshotFiles(stateDir, "reduction");
   const evictionFiles = await listSnapshotFiles(stateDir, "eviction");
-  const moduleObservationFiles = await listModuleObservationFiles(stateDir);
+  const moduleObservationSummaries = await listSessionModuleObservationSummaries(stateDir);
   const summaryBySessionId = new Map<string, VisualSessionSummary>();
 
   const mergeCount = async (kind: "stability" | "reduction" | "eviction", fileName: string) => {
@@ -675,12 +657,8 @@ export async function readVisualSessionListWithOptions(
   for (const fileName of evictionFiles) {
     await mergeCount("eviction", fileName);
   }
-  for (const filePath of moduleObservationFiles) {
-    const observations = await readSnapshotFile<{
-      at: string;
-      sessionId: string;
-    }>([filePath]);
-    const sessionId = String(observations[0]?.sessionId ?? "").trim();
+  for (const moduleSummary of moduleObservationSummaries) {
+    const sessionId = String(moduleSummary.sessionId ?? "").trim();
     if (!sessionId) continue;
     const summary = summaryBySessionId.get(sessionId) ?? {
       sessionId,
@@ -695,7 +673,7 @@ export async function readVisualSessionListWithOptions(
       charSavedCount: 0,
       cacheAuditSummary: null,
     };
-    const latestAt = latestAtOf(observations);
+    const latestAt = String(moduleSummary.latestAt ?? "");
     if (latestAt > summary.lastAt) summary.lastAt = latestAt;
     summaryBySessionId.set(sessionId, summary);
   }

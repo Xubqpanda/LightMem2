@@ -2,7 +2,7 @@
 import { runBeforeCallReductionOrchestrator } from "@tokenpilot/host-adapter";
 import {
   findFirstMessageText,
-  appendModuleObservation,
+  appendModuleObservations,
 } from "@tokenpilot/product-surface";
 import { injectProceduralMemoryHints } from "./procedural-memory.js";
 import {
@@ -467,18 +467,19 @@ export async function prepareProxyRequest(args: {
         },
       },
     ];
-    for (const observation of observations) {
-      try {
-        await appendModuleObservation(cfg.stateDir, {
+    try {
+      await appendModuleObservations(
+        cfg.stateDir,
+        observations.map((observation) => ({
           sessionId: resolvedSessionId,
           phase: "request",
           ...observation,
-        });
-      } catch (error) {
-        logger.warn?.(
-          `[plugin-runtime] module observation write failed module=${observation.moduleId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+        })),
+      );
+    } catch (error) {
+      logger.warn?.(
+        `[plugin-runtime] module observation write failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   if (cfg.stateDir) {

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   appendModuleObservation,
+  listSessionModuleObservationSummaries,
   readSessionModuleObservationSummary,
 } from "../src/module-observability.js";
 import { readVisualSessionData, readVisualSessionList } from "../src/visual/session-visual-data.js";
@@ -78,6 +79,99 @@ test("module observations aggregate eviction savings and estimator usage", async
     assert.equal(data.moduleSummary?.mode, "eviction-only");
     assert.equal(data.stability.length, 0);
     assert.equal(data.reduction.length, 0);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("session summary listing falls back to legacy observation files", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "tokenpilot-module-observability-legacy-"));
+  const sessionId = "legacy/session";
+  const collidingSessionId = "legacy_session";
+  try {
+    const legacyDir = join(stateDir, "tokenpilot", "module-observability");
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      join(legacyDir, "legacy_session.jsonl"),
+      [sessionId, collidingSessionId].map((legacySessionId, index) => JSON.stringify({
+        at: `2026-07-20T00:00:0${index}.000Z`,
+        sessionId: legacySessionId,
+        phase: "request",
+        moduleId: "eviction",
+        enabled: true,
+        executed: true,
+        changed: false,
+        savedChars: 0,
+        savedTokens: 0,
+        api: { inputTokens: 10 + index, outputTokens: 2 },
+      })).join("\n") + "\n",
+      "utf8",
+    );
+
+    const summaries = await listSessionModuleObservationSummaries(stateDir);
+    assert.equal(summaries.length, 2);
+    assert.deepEqual(
+      summaries.map((summary) => summary.sessionId).sort(),
+      [sessionId, collidingSessionId].sort(),
+    );
+    assert.equal(summaries.every((summary) => summary.mode === "partial"), true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("concurrent module observations preserve every aggregate update", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "tokenpilot-module-observability-concurrent-"));
+  const sessionId = "session-concurrent";
+  try {
+    await Promise.all(Array.from({ length: 20 }, (_value, index) => appendModuleObservation(stateDir, {
+      at: `2026-07-20T00:00:${String(index).padStart(2, "0")}.000Z`,
+      sessionId,
+      phase: "request",
+      moduleId: "eviction",
+      enabled: true,
+      executed: true,
+      changed: index % 2 === 0,
+      savedChars: 4,
+      savedTokens: 1,
+      api: { inputTokens: 2, outputTokens: 1 },
+    })));
+
+    const summary = await readSessionModuleObservationSummary(stateDir, sessionId);
+    assert.equal(summary?.mode, "partial");
+    assert.equal(summary?.modules.eviction.executions, 20);
+    assert.equal(summary?.modules.eviction.changes, 10);
+    assert.equal(summary?.modules.eviction.savedTokens, 20);
+    assert.equal(summary?.modules.eviction.apiInputTokens, 40);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("encoded observation paths keep similar session ids isolated", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "tokenpilot-module-observability-session-id-"));
+  try {
+    await Promise.all(["session/a", "session_a"].map((sessionId, index) => appendModuleObservation(stateDir, {
+      at: `2026-07-20T00:00:0${index}.000Z`,
+      sessionId,
+      phase: "request",
+      moduleId: "reduction",
+      enabled: true,
+      executed: true,
+      changed: true,
+      savedChars: 40 + index,
+      savedTokens: 10 + index,
+      api: { inputTokens: 0, outputTokens: 0 },
+    })));
+
+    const first = await readSessionModuleObservationSummary(stateDir, "session/a");
+    const second = await readSessionModuleObservationSummary(stateDir, "session_a");
+    assert.equal(first?.sessionId, "session/a");
+    assert.equal(first?.modules.reduction.savedTokens, 10);
+    assert.equal(second?.sessionId, "session_a");
+    assert.equal(second?.modules.reduction.savedTokens, 11);
+    const summaryFiles = await readdir(join(stateDir, "tokenpilot", "module-observability", "sessions"));
+    assert.equal(summaryFiles.length, 2);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
