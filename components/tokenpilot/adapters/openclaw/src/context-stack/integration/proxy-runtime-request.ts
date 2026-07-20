@@ -346,6 +346,20 @@ export async function prepareProxyRequest(args: {
     extractInputText: helpers.extractInputText,
     applyPolicyBeforeCall: helpers.applyPolicyBeforeCall,
   });
+  if (cfg.stateDir && evictionRun.enabled) {
+    const policyMetadata = evictionRun.policyMetadata && typeof evictionRun.policyMetadata === "object"
+      ? evictionRun.policyMetadata as Record<string, any>
+      : undefined;
+    await helpers.appendTaskStateTrace(cfg.stateDir, {
+      stage: "eviction_runner_completed",
+      sessionId: resolvedSessionId,
+      enabled: evictionRun.enabled,
+      executed: evictionRun.executed,
+      skippedReason: evictionRun.skippedReason ?? null,
+      decision: policyMetadata?.decisions?.eviction ?? null,
+      taskState: policyMetadata?.decisions?.taskState ?? null,
+    });
+  }
   const reductionApplied = await runReductionIfEnabled(
     cfg,
     logger,

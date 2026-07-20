@@ -107,6 +107,7 @@ test("all-enabled request behavior remains stable before module decoupling", asy
     assert.deepEqual(traceStages, [
       "procedural_memory_retrieval",
       "stable_prefix_rewrite",
+      "eviction_runner_completed",
       "proxy_reduction_session_resolved",
       "proxy_before_call_rewrite",
     ]);
@@ -199,6 +200,10 @@ for (const combination of MODULE_COMBINATIONS) {
       assert.equal(policyCalls, combination.enablement.eviction ? 1 : 0);
       assert.equal(prepared.evictionRun.enabled, combination.enablement.eviction);
       assert.equal(prepared.evictionRun.executed, combination.enablement.eviction);
+      assert.equal(
+        effects.eviction.traces.some(({ name }) => name === "eviction_runner_completed"),
+        combination.enablement.eviction,
+      );
       assert.equal(prepared.reductionApplied.changedBlocks > 0, combination.enablement.reduction);
       assert.ok(payloadChanges.length > 0);
       assert.ok(stateChanges.some(({ path }) => path === "tokenpilot/proxy-requests.jsonl"));
