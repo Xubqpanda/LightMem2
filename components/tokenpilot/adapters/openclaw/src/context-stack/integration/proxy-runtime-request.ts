@@ -70,14 +70,13 @@ function buildReductionSkippedResult(
   };
 }
 
-async function applyProxyReduction(
+async function runReductionIfEnabled(
   cfg: any,
   logger: any,
   helpers: any,
   payload: any,
   resolvedSessionId: string,
   reductionPassOptions: any,
-  policyModule: any,
   proxyPureForward: boolean,
   reductionTriggerMinChars: number,
   reductionMaxToolChars: number,
@@ -346,14 +345,13 @@ export async function prepareProxyRequest(args: {
     extractInputText: helpers.extractInputText,
     applyPolicyBeforeCall: helpers.applyPolicyBeforeCall,
   });
-  const reductionApplied = await applyProxyReduction(
+  const reductionApplied = await runReductionIfEnabled(
     cfg,
     logger,
     helpers,
     payload,
     resolvedSessionId,
     reductionPassOptions,
-    policyModule,
     proxyPureForward,
     reductionTriggerMinChars,
     reductionMaxToolChars,
