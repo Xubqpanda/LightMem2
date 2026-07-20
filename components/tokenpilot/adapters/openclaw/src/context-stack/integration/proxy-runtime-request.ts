@@ -17,6 +17,7 @@ import { recordProxyInbound } from "./proxy-runtime-logging.js";
 import { buildOpenClawCacheAuditSnapshot } from "../../cache-audit.js";
 import { runEvictionIfEnabled, type EvictionRunResult } from "./eviction-runner.js";
 import { runPrefixIfEnabled } from "./prefix-runner.js";
+import { runRequestModules, type ModuleExecutionRecord } from "./module-orchestrator.js";
 
 type ProxyRequestPreparation = {
   payload: any;
@@ -37,6 +38,7 @@ type ProxyRequestPreparation = {
   rootPromptRewrite: any;
   reductionApplied: any;
   evictionRun: EvictionRunResult;
+  requestModuleExecutions: ModuleExecutionRecord[];
   developerForwardedText: string;
   developerCanonicalText: string;
   devAndUser: any;
@@ -243,16 +245,166 @@ export async function prepareProxyRequest(args: {
     }
   }
   const instructions = helpers.normalizeText(String(requestEnvelope.instructions ?? payload?.instructions ?? ""));
-  const prefixRun = runPrefixIfEnabled({
-    enabled: stabilizerEnabled,
-    payload,
-    requestEnvelope,
-    payloadCodec,
-    model,
-    dynamicContextTarget,
-    helpers,
+  const requestModuleContext: {
+    prefixRun: ReturnType<typeof runPrefixIfEnabled>;
+    memoryInjection: { injected: boolean; hitCount: number };
+    beforeReductionInputCount: number;
+    beforeReductionInputChars: number;
+    beforeReductionCanonicalInput: string;
+    evictionRun: EvictionRunResult;
+    reductionApplied: any;
+  } = {
+    prefixRun: runPrefixIfEnabled({
+      enabled: false,
+      payload,
+      requestEnvelope,
+      payloadCodec,
+      model,
+      dynamicContextTarget,
+      helpers,
+    }),
+    memoryInjection: { injected: false, hitCount: 0 },
+    beforeReductionInputCount: 0,
+    beforeReductionInputChars: 0,
+    beforeReductionCanonicalInput: "",
+    evictionRun: {
+      enabled: false,
+      executed: false,
+      skippedReason: "module_disabled",
+    },
+    reductionApplied: buildReductionSkippedResult(
+      payload,
+      reductionTriggerMinChars,
+      reductionMaxToolChars,
+      proxyPureForward ? "proxy_pure_forward" : "module_disabled",
+    ),
+  };
+  const requestModuleExecutions = await runRequestModules({
+    context: requestModuleContext,
+    modules: [
+      {
+        id: "stabilizer",
+        enabled: () => stabilizerEnabled,
+        run: () => {
+          requestModuleContext.prefixRun = runPrefixIfEnabled({
+            enabled: true,
+            payload,
+            requestEnvelope,
+            payloadCodec,
+            model,
+            dynamicContextTarget,
+            helpers,
+          });
+          requestEnvelope = requestModuleContext.prefixRun.requestEnvelope;
+          return requestModuleContext.prefixRun;
+        },
+      },
+      {
+        id: "memory-injection",
+        enabled: () => !proxyPureForward,
+        run: async () => {
+          requestModuleContext.memoryInjection = await injectProceduralMemoryHints({
+            cfg,
+            sessionId: resolvedSessionId,
+            payload,
+            helpers,
+          });
+          return requestModuleContext.memoryInjection;
+        },
+      },
+      {
+        id: "stabilizer-trace",
+        enabled: () => stabilizerEnabled && Boolean(cfg.stateDir),
+        run: async () => {
+          const { prefixRun, memoryInjection } = requestModuleContext;
+          await helpers.appendTaskStateTrace(cfg.stateDir, {
+            stage: "stable_prefix_rewrite",
+            sessionId: resolvedSessionId,
+            model,
+            promptCacheKey: prefixRun.stableRewrite.promptCacheKey,
+            inputItemCount: Array.isArray(payload?.input) ? payload.input.length : 0,
+            inputChars: helpers.estimatePayloadInputChars(payload?.input),
+            userContentRewrites: prefixRun.stableRewrite.userContentRewrites,
+            senderMetadataBlocksBefore: prefixRun.stableRewrite.senderMetadataBlocksBefore,
+            senderMetadataBlocksAfter: prefixRun.stableRewrite.senderMetadataBlocksAfter,
+            proceduralMemoryInjected: memoryInjection.injected,
+            proceduralMemoryHitCount: memoryInjection.hitCount,
+          });
+        },
+      },
+      {
+        id: "reduction-snapshot",
+        enabled: () => true,
+        run: () => {
+          requestModuleContext.beforeReductionInputCount = Array.isArray(payload?.input)
+            ? payload.input.length
+            : 0;
+          requestModuleContext.beforeReductionInputChars = helpers.estimatePayloadInputChars(payload?.input);
+          requestModuleContext.beforeReductionCanonicalInput = helpers.serializeCanonicalInputForUx(payload?.input);
+        },
+      },
+      {
+        id: "eviction",
+        enabled: () => cfg.moduleEnablement.eviction,
+        run: async () => {
+          requestModuleContext.evictionRun = await runEvictionIfEnabled({
+            cfg,
+            logger,
+            payload,
+            sessionId: resolvedSessionId,
+            policyModule,
+            extractInputText: helpers.extractInputText,
+            applyPolicyBeforeCall: helpers.applyPolicyBeforeCall,
+          });
+          if (cfg.stateDir) {
+            const policyMetadata =
+              requestModuleContext.evictionRun.policyMetadata
+              && typeof requestModuleContext.evictionRun.policyMetadata === "object"
+                ? requestModuleContext.evictionRun.policyMetadata as Record<string, any>
+                : undefined;
+            await helpers.appendTaskStateTrace(cfg.stateDir, {
+              stage: "eviction_runner_completed",
+              sessionId: resolvedSessionId,
+              enabled: requestModuleContext.evictionRun.enabled,
+              executed: requestModuleContext.evictionRun.executed,
+              skippedReason: requestModuleContext.evictionRun.skippedReason ?? null,
+              decision: policyMetadata?.decisions?.eviction ?? null,
+              taskState: policyMetadata?.decisions?.taskState ?? null,
+            });
+          }
+          return requestModuleContext.evictionRun;
+        },
+      },
+      {
+        id: "reduction",
+        enabled: () => reductionEnabled,
+        run: async () => {
+          requestModuleContext.reductionApplied = await runReductionIfEnabled(
+            cfg,
+            logger,
+            helpers,
+            payload,
+            resolvedSessionId,
+            reductionPassOptions,
+            proxyPureForward,
+            reductionTriggerMinChars,
+            reductionMaxToolChars,
+          );
+          return requestModuleContext.reductionApplied;
+        },
+      },
+    ],
   });
+  const prefixRun = requestModuleContext.prefixRun;
   requestEnvelope = prefixRun.requestEnvelope;
+  const {
+    memoryInjection,
+    beforeReductionInputCount,
+    beforeReductionInputChars,
+    beforeReductionCanonicalInput,
+    evictionRun,
+    reductionApplied,
+  } = requestModuleContext;
   const {
     stableRewrite,
     rootPromptRewrite,
@@ -262,66 +414,6 @@ export async function prepareProxyRequest(args: {
     firstTurnCandidate,
     originalPromptCacheKey,
   } = prefixRun;
-  const memoryInjection = !proxyPureForward
-    ? await injectProceduralMemoryHints({
-      cfg,
-      sessionId: resolvedSessionId,
-      payload,
-      helpers,
-    })
-    : { injected: false, hitCount: 0 };
-  if (stabilizerEnabled && cfg.stateDir) {
-    await helpers.appendTaskStateTrace(cfg.stateDir, {
-      stage: "stable_prefix_rewrite",
-      sessionId: resolvedSessionId,
-      model,
-      promptCacheKey: stableRewrite.promptCacheKey,
-      inputItemCount: Array.isArray(payload?.input) ? payload.input.length : 0,
-      inputChars: helpers.estimatePayloadInputChars(payload?.input),
-      userContentRewrites: stableRewrite.userContentRewrites,
-      senderMetadataBlocksBefore: stableRewrite.senderMetadataBlocksBefore,
-      senderMetadataBlocksAfter: stableRewrite.senderMetadataBlocksAfter,
-      proceduralMemoryInjected: memoryInjection.injected,
-      proceduralMemoryHitCount: memoryInjection.hitCount,
-    });
-  }
-  const beforeReductionInputCount = Array.isArray(payload?.input) ? payload.input.length : 0;
-  const beforeReductionInputChars = helpers.estimatePayloadInputChars(payload?.input);
-  const beforeReductionCanonicalInput = helpers.serializeCanonicalInputForUx(payload?.input);
-  const evictionRun = await runEvictionIfEnabled({
-    cfg,
-    logger,
-    payload,
-    sessionId: resolvedSessionId,
-    policyModule,
-    extractInputText: helpers.extractInputText,
-    applyPolicyBeforeCall: helpers.applyPolicyBeforeCall,
-  });
-  if (cfg.stateDir && evictionRun.enabled) {
-    const policyMetadata = evictionRun.policyMetadata && typeof evictionRun.policyMetadata === "object"
-      ? evictionRun.policyMetadata as Record<string, any>
-      : undefined;
-    await helpers.appendTaskStateTrace(cfg.stateDir, {
-      stage: "eviction_runner_completed",
-      sessionId: resolvedSessionId,
-      enabled: evictionRun.enabled,
-      executed: evictionRun.executed,
-      skippedReason: evictionRun.skippedReason ?? null,
-      decision: policyMetadata?.decisions?.eviction ?? null,
-      taskState: policyMetadata?.decisions?.taskState ?? null,
-    });
-  }
-  const reductionApplied = await runReductionIfEnabled(
-    cfg,
-    logger,
-    helpers,
-    payload,
-    resolvedSessionId,
-    reductionPassOptions,
-    proxyPureForward,
-    reductionTriggerMinChars,
-    reductionMaxToolChars,
-  );
   if (cfg.stateDir) {
     const workspaceHint =
       typeof rootPromptRewrite?.workdir === "string" && rootPromptRewrite.workdir.trim().length > 0
@@ -430,6 +522,7 @@ export async function prepareProxyRequest(args: {
     rootPromptRewrite,
     reductionApplied,
     evictionRun,
+    requestModuleExecutions,
     developerForwardedText,
     developerCanonicalText,
     devAndUser,
