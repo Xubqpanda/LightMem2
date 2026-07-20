@@ -23,7 +23,7 @@ export async function runEvictionIfEnabled(params: {
     modules: { policy?: RuntimeModule },
   ): Promise<{ turnCtx: any }>;
 }): Promise<EvictionRunResult> {
-  const enabled = Boolean(params.cfg.modules.eviction && params.cfg.eviction.enabled);
+  const enabled = Boolean(params.cfg.moduleEnablement.eviction);
   if (!enabled) {
     return { enabled: false, executed: false, skippedReason: "module_disabled" };
   }

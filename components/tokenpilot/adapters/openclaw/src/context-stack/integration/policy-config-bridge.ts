@@ -25,7 +25,7 @@ export function buildPolicyModuleConfigFromPluginConfig(
     reductionEnabled: false,
     reductionFormatSlimmingEnabled: false,
     reductionSemanticEnabled: false,
-    evictionEnabled: cfg.modules.eviction && cfg.eviction.enabled,
+    evictionEnabled: cfg.moduleEnablement.eviction,
     evictionPolicy: cfg.eviction.policy,
     evictionMinBlockChars: cfg.eviction.minBlockChars,
     taskStateEstimator: cfg.taskStateEstimator.enabled

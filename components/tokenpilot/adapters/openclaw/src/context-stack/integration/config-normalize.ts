@@ -54,7 +54,9 @@ function normalizeHostConfig(raw: PluginHostConfig): NormalizedPluginHostConfig 
   };
 }
 
-function normalizeMethodConfig(raw: TokenPilotMethodConfig): NormalizedTokenPilotMethodConfig {
+function normalizeMethodConfig(
+  raw: TokenPilotMethodConfig,
+): NormalizedTokenPilotMethodConfig & Pick<NormalizedPluginRuntimeConfig, "moduleEnablement"> {
   const modules = raw.modules ?? {};
   const eviction = raw.eviction ?? {};
   const taskStateEstimator = raw.taskStateEstimator ?? {};
@@ -92,16 +94,23 @@ function normalizeMethodConfig(raw: TokenPilotMethodConfig): NormalizedTokenPilo
     taskStateEstimator.evidenceMode === "two_state" || envTaskStateEstimatorEvidenceMode === "two_state"
       ? "two_state"
       : "three_state";
+  const normalizedModules = {
+    stabilizer: modules.stabilizer ?? true,
+    policy: modules.policy ?? true,
+    reduction: modules.reduction ?? true,
+    eviction: modules.eviction ?? false,
+  };
+  const normalizedEvictionEnabled = eviction.enabled ?? false;
 
   return {
-    modules: {
-      stabilizer: modules.stabilizer ?? true,
-      policy: modules.policy ?? true,
-      reduction: modules.reduction ?? true,
-      eviction: modules.eviction ?? false,
+    modules: normalizedModules,
+    moduleEnablement: {
+      stabilizer: normalizedModules.stabilizer,
+      reduction: normalizedModules.reduction,
+      eviction: normalizedModules.eviction && normalizedEvictionEnabled,
     },
     eviction: {
-      enabled: eviction.enabled ?? false,
+      enabled: normalizedEvictionEnabled,
       policy: eviction.policy === "lru" || eviction.policy === "lfu" || eviction.policy === "gdsf" || eviction.policy === "model_scored" || eviction.policy === "noop" ? eviction.policy : "noop",
       maxCandidateBlocks: Math.max(1, eviction.maxCandidateBlocks ?? 128),
       minBlockChars: Math.max(0, eviction.minBlockChars ?? 256),

@@ -24,7 +24,11 @@ const estimateMessagesChars = (messages: any[], contentToText: (value: unknown) 
 test("history eviction runner is side-effect free when disabled", async () => {
   let rewriteCalls = 0;
   const result = await runHistoryEvictionIfEnabled({
-    cfg: { modules: { eviction: false }, eviction: { enabled: true } },
+    cfg: {
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: false },
+      modules: { eviction: false },
+      eviction: { enabled: true },
+    },
     sessionId: state.sessionId,
     state,
     helpers,
@@ -58,6 +62,7 @@ test("history eviction runner reports applied task ids and savings", async () =>
   const result = await runHistoryEvictionIfEnabled({
     cfg: {
       stateDir: "/tmp/state",
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: true },
       modules: { eviction: true },
       eviction: {
         enabled: true,

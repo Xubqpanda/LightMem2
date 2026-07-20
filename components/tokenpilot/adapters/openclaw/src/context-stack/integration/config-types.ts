@@ -97,6 +97,12 @@ export type TokenPilotMethodConfig = {
 
 export type PluginRuntimeConfig = PluginHostConfig & TokenPilotMethodConfig;
 
+export type NormalizedModuleEnablement = {
+  stabilizer: boolean;
+  reduction: boolean;
+  eviction: boolean;
+};
+
 export type NormalizedPluginHostConfig =
   Required<Omit<PluginHostConfig, "proxyBaseUrl" | "proxyApiKey">>
   & Pick<PluginHostConfig, "proxyBaseUrl" | "proxyApiKey">;
@@ -105,7 +111,8 @@ export type NormalizedTokenPilotMethodConfig = Required<TokenPilotMethodConfig>;
 
 export type NormalizedPluginRuntimeConfig =
   NormalizedPluginHostConfig
-  & NormalizedTokenPilotMethodConfig;
+  & NormalizedTokenPilotMethodConfig
+  & { moduleEnablement: NormalizedModuleEnablement };
 
 export type PluginLogger = {
   info?: (...args: unknown[]) => void;

@@ -74,6 +74,7 @@ test("handleNonStreamingProxyResponse forwards reduced JSON response and records
   await handleNonStreamingProxyResponse({
     cfg: {
       stateDir: "/tmp/tokenpilot-proxy-runtime-response-test",
+      moduleEnablement: { stabilizer: false, reduction: true, eviction: false },
       modules: { reduction: true },
       reduction: { engine: "layered", passes: {} },
     },
@@ -175,6 +176,7 @@ test("handleNonStreamingProxyResponse skips reduction effects when module is dis
   await handleNonStreamingProxyResponse({
     cfg: {
       stateDir: "/tmp/tokenpilot-proxy-runtime-response-disabled-test",
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: false },
       modules: { reduction: false },
       reduction: { engine: "layered", passes: {} },
       debugTapPath: "/tmp/tokenpilot-proxy-runtime-response-disabled-debug.jsonl",
@@ -256,6 +258,7 @@ test("handleStreamingProxyResponse forwards stream and records stream ux after f
   await handleStreamingProxyResponse({
     cfg: {
       stateDir: "/tmp/tokenpilot-proxy-runtime-stream-test",
+      moduleEnablement: { stabilizer: false, reduction: true, eviction: false },
       modules: { reduction: true },
     },
     res,

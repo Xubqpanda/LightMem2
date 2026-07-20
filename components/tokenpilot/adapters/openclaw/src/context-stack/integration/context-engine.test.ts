@@ -41,6 +41,7 @@ test("context engine skips eviction rewrite and traces when eviction is disabled
     ]);
     const engine = createPluginContextEngine({
       stateDir,
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: false },
       modules: { eviction: false },
       eviction: { enabled: true },
       memory: { enabled: false, autoDistill: false },
@@ -65,6 +66,7 @@ test("context engine records enabled history eviction independently", async () =
     ]);
     const engine = createPluginContextEngine({
       stateDir,
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: true },
       modules: { eviction: true },
       eviction: {
         enabled: true,

@@ -87,7 +87,7 @@ async function runReductionIfEnabled(
     triggerMinChars: reductionTriggerMinChars,
     maxToolChars: reductionMaxToolChars,
     proxyPureForward,
-    reductionEnabled: Boolean(cfg.modules.reduction),
+    reductionEnabled: cfg.moduleEnablement.reduction,
   };
 
   return runBeforeCallReductionOrchestrator(
@@ -226,12 +226,12 @@ export async function prepareProxyRequest(args: {
     syncOpenClawPayloadFromEnvelope(payload, requestEnvelope, payloadCodec);
   }
   const proxyPureForward = cfg.proxyMode.pureForward;
-  const stabilizerEnabled = !proxyPureForward && Boolean(cfg.modules.stabilizer);
+  const stabilizerEnabled = !proxyPureForward && cfg.moduleEnablement.stabilizer;
   const reductionTriggerMinChars = Math.max(256, cfg.reduction.triggerMinChars ?? 2200);
   const reductionMaxToolChars = Math.max(256, cfg.reduction.maxToolChars ?? 1200);
-  const reductionEnabled = !proxyPureForward && Boolean(cfg.modules.reduction);
+  const reductionEnabled = !proxyPureForward && cfg.moduleEnablement.reduction;
   const resolvedSessionId = String(requestEnvelope.session.sessionId ?? "proxy-session").trim() || "proxy-session";
-  if (!proxyPureForward && cfg.modules.reduction) {
+  if (reductionEnabled) {
     const recoveryResult = injectMemoryFaultProtocolInstructionsText(requestEnvelope.instructions);
     if (recoveryResult.changed) {
       requestEnvelope = {
@@ -404,7 +404,7 @@ export async function prepareProxyRequest(args: {
   const afterReductionInputText = helpers.extractInputText(payload?.input);
   const afterReductionCanonicalInput = helpers.serializeCanonicalInputForUx(payload?.input);
   requestEnvelope = payloadCodec.decodeRequest(payload);
-  if (!proxyPureForward && cfg.modules.reduction) {
+  if (reductionEnabled) {
     requestEnvelope = {
       ...requestEnvelope,
       metadata: {

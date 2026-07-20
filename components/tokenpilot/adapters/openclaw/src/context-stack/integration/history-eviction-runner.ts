@@ -29,7 +29,7 @@ export async function runHistoryEvictionIfEnabled(params: {
   estimateMessagesChars(messages: any[], contentToText: (value: unknown) => string): number;
 }): Promise<HistoryEvictionResult> {
   const beforeChars = params.estimateMessagesChars(params.state.messages, params.helpers.contentToText);
-  const enabled = Boolean(params.cfg.modules.eviction && params.cfg.eviction.enabled);
+  const enabled = Boolean(params.cfg.moduleEnablement.eviction);
   if (!enabled) {
     return {
       state: params.state,

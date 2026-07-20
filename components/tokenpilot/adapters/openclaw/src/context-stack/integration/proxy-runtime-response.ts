@@ -44,7 +44,7 @@ export async function handleStreamingProxyResponse(args: {
     reductionApplied,
     cacheAuditSnapshot,
   } = args;
-  const reductionEnabled = !proxyPureForward && Boolean(cfg.modules?.reduction);
+  const reductionEnabled = !proxyPureForward && Boolean(cfg.moduleEnablement?.reduction);
   const upstreamStreamResp = await helpers.requestUpstreamResponsesStream(upstream, activePayload, logger, cfg.stateDir);
   if (cfg.stateDir) {
     await helpers.appendTaskStateTrace(cfg.stateDir, {
@@ -174,7 +174,7 @@ export async function handleNonStreamingProxyResponse(args: {
     reductionTriggerMinChars,
     cacheAuditSnapshot,
   } = args;
-  const reductionEnabled = !proxyPureForward && Boolean(cfg.modules?.reduction);
+  const reductionEnabled = !proxyPureForward && Boolean(cfg.moduleEnablement?.reduction);
   const hostBridge = createOpenClawHostBridge(helpers);
   const responseCodec = payloadCodec ?? hostBridge.payloadCodec;
   let upstreamResp: UpstreamHttpResponse | null = null;

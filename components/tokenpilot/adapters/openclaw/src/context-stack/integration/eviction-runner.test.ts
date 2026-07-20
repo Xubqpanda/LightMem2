@@ -7,6 +7,7 @@ test("eviction runner uses normalized eviction switches instead of legacy policy
   let calls = 0;
   const disabled = await runEvictionIfEnabled({
     cfg: {
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: false },
       modules: { policy: true, eviction: false },
       eviction: { enabled: true },
     },
@@ -32,6 +33,7 @@ test("eviction runner uses normalized eviction switches instead of legacy policy
 test("eviction runner returns policy metadata after execution", async () => {
   const result = await runEvictionIfEnabled({
     cfg: {
+      moduleEnablement: { stabilizer: false, reduction: false, eviction: true },
       modules: { policy: false, eviction: true },
       eviction: { enabled: true },
     },

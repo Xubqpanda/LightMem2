@@ -55,7 +55,7 @@ export async function applyProxyAfterCallReduction(params: {
   let nextText = txt;
   let afterCallReduction: any = null;
 
-  if (!proxyPureForward && cfg.modules.reduction && cfg.reduction.engine === "layered") {
+  if (!proxyPureForward && cfg.moduleEnablement.reduction && cfg.reduction.engine === "layered") {
     if (parsedResponseForMirror) {
       try {
         afterCallReduction = await helpers.applyLayeredReductionAfterCall(
