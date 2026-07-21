@@ -372,7 +372,7 @@ LightMem2/
 │   ├── presets/
 │   │   └── tokenpilot/           # Stabilizer + Reduction + Eviction composition contract
 │   ├── adapters/
-│   |   ├── openclaw/             # OpenClaw adapter
+│   │   ├── openclaw/             # OpenClaw adapter
 │   │   ├── codex/                # Codex CLI adapter
 │   │   └── claude-code/          # Claude Code adapter
 │   └── products/
