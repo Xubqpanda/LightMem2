@@ -6,8 +6,8 @@ import {
   pluginStateSubdirWriteTargets,
 } from "@lightmem2/artifact-store";
 
-export const TOKENPILOT_FEATURE_MODULE_IDS = ["stabilizer", "reduction", "eviction"] as const;
-export type TokenPilotFeatureModuleId = (typeof TOKENPILOT_FEATURE_MODULE_IDS)[number];
+export const OBSERVABLE_FEATURE_MODULE_IDS = ["stabilizer", "reduction", "eviction"] as const;
+export type ObservableFeatureModuleId = (typeof OBSERVABLE_FEATURE_MODULE_IDS)[number];
 export type ModuleObservationPhase = "request" | "response" | "history";
 
 export type ModuleApiAccounting = {
@@ -20,7 +20,7 @@ export type ModuleObservation = {
   at: string;
   sessionId: string;
   phase: ModuleObservationPhase;
-  moduleId: TokenPilotFeatureModuleId;
+  moduleId: ObservableFeatureModuleId;
   enabled: boolean;
   executed: boolean;
   changed: boolean;
@@ -50,7 +50,7 @@ export type ModuleObservationAggregate = {
 export type SessionModuleObservationSummary = {
   sessionId: string;
   mode: string;
-  modules: Record<TokenPilotFeatureModuleId, ModuleObservationAggregate>;
+  modules: Record<ObservableFeatureModuleId, ModuleObservationAggregate>;
   latestAt: string;
 };
 
@@ -178,7 +178,7 @@ export async function readSessionModuleObservations(
         .flatMap((line) => {
           try {
             const parsed = JSON.parse(line) as ModuleObservation;
-            return TOKENPILOT_FEATURE_MODULE_IDS.includes(parsed.moduleId)
+            return OBSERVABLE_FEATURE_MODULE_IDS.includes(parsed.moduleId)
               && parsed.sessionId === sessionId
               ? [parsed]
               : [];
@@ -210,15 +210,15 @@ function emptyAggregate(): ModuleObservationAggregate {
   };
 }
 
-function moduleMode(modules: Record<TokenPilotFeatureModuleId, ModuleObservationAggregate>): string {
-  const observed = TOKENPILOT_FEATURE_MODULE_IDS.filter((moduleId) => modules[moduleId].observed);
+function moduleMode(modules: Record<ObservableFeatureModuleId, ModuleObservationAggregate>): string {
+  const observed = OBSERVABLE_FEATURE_MODULE_IDS.filter((moduleId) => modules[moduleId].observed);
   if (observed.length === 0) return "unknown";
-  if (observed.length < TOKENPILOT_FEATURE_MODULE_IDS.length) return "partial";
+  if (observed.length < OBSERVABLE_FEATURE_MODULE_IDS.length) return "partial";
   const enabled = observed.filter((moduleId) => modules[moduleId].enabled);
   if (enabled.length === 0) return "none";
   if (
-    observed.length === TOKENPILOT_FEATURE_MODULE_IDS.length
-    && enabled.length === TOKENPILOT_FEATURE_MODULE_IDS.length
+    observed.length === OBSERVABLE_FEATURE_MODULE_IDS.length
+    && enabled.length === OBSERVABLE_FEATURE_MODULE_IDS.length
   ) return "all-enabled";
   return enabled.length === 1 ? `${enabled[0]}-only` : enabled.join("+");
 }

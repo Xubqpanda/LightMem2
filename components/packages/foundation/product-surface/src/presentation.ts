@@ -1,8 +1,8 @@
 import type { ProductSurfaceConfigAdapter } from "@lightmem2/host-adapter";
 import {
-  TOKENPILOT_FEATURE_MODULE_IDS,
+  OBSERVABLE_FEATURE_MODULE_IDS,
   type SessionModuleObservationSummary,
-  type TokenPilotFeatureModuleId,
+  type ObservableFeatureModuleId,
 } from "./module-observability.js";
 import { readRecentReductionMetrics, summarizeRecentReductionMetrics } from "./metrics.js";
 import {
@@ -133,8 +133,8 @@ function buildLatestNonWarmDiagnosisLines(
 }
 
 function formatModuleObservationLine(
-  moduleId: TokenPilotFeatureModuleId,
-  module: SessionModuleObservationSummary["modules"][TokenPilotFeatureModuleId],
+  moduleId: ObservableFeatureModuleId,
+  module: SessionModuleObservationSummary["modules"][ObservableFeatureModuleId],
 ): string {
   const cost = typeof module.apiCostUsd === "number"
     ? `, api cost=$${module.apiCostUsd.toFixed(6)}`
@@ -391,7 +391,7 @@ export function formatSessionReport(params: {
 
   if (detailsEnabled) {
     if (moduleSummary) {
-      for (const moduleId of TOKENPILOT_FEATURE_MODULE_IDS) {
+      for (const moduleId of OBSERVABLE_FEATURE_MODULE_IDS) {
         const module = moduleSummary.modules[moduleId];
         lines.push(formatModuleObservationLine(moduleId, module));
       }
@@ -495,7 +495,7 @@ export function buildSessionReportText(params: ProductSurfaceSessionReportData):
     ];
     if (detailsEnabled) {
       if (moduleSummary) {
-        for (const moduleId of TOKENPILOT_FEATURE_MODULE_IDS) {
+        for (const moduleId of OBSERVABLE_FEATURE_MODULE_IDS) {
           const module = moduleSummary.modules[moduleId];
           lines.push(formatModuleObservationLine(moduleId, module));
         }
