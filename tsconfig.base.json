@@ -19,7 +19,7 @@
                 "components/tokenpilot/packages/foundation/artifact-store/src/index.ts"
             ],
             "@tokenpilot/decision": [
-                "components/tokenpilot/packages/layers/decision/src/index.ts"
+                "components/tokenpilot/presets/tokenpilot/src/index.ts"
             ],
             "@tokenpilot/history": [
                 "components/tokenpilot/packages/foundation/history/src/index.ts"

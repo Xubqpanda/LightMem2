@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "lightmem2": {
-    "role": "feature"
+    "role": "preset"
   },
   "type": "module",
   "main": "src/index.ts",

@@ -1,6 +1,7 @@
 packages:
   - "components/tokenpilot/packages/*"
   - "components/tokenpilot/packages/*/*"
+  - "components/tokenpilot/presets/*"
   - "components/tokenpilot/adapters/*"
   - "components/tokenpilot/products/*"
   - "apps/*"

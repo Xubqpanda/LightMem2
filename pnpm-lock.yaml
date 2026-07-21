@@ -93,7 +93,7 @@ importers:
         version: link:../../packages/foundation/artifact-store
       '@tokenpilot/decision':
         specifier: workspace:*
-        version: link:../../packages/layers/decision
+        version: link:../../presets/tokenpilot
       '@tokenpilot/eviction':
         specifier: workspace:*
         version: link:../../packages/features/eviction
@@ -211,20 +211,20 @@ importers:
         specifier: workspace:*
         version: link:../../features/reduction
 
-  components/tokenpilot/packages/layers/decision:
+  components/tokenpilot/presets/tokenpilot:
     dependencies:
       '@tokenpilot/eviction':
         specifier: workspace:*
-        version: link:../../features/eviction
+        version: link:../../packages/features/eviction
       '@tokenpilot/history':
         specifier: workspace:*
-        version: link:../../foundation/history
+        version: link:../../packages/foundation/history
       '@tokenpilot/kernel':
         specifier: workspace:*
-        version: link:../../foundation/kernel
+        version: link:../../packages/foundation/kernel
       '@tokenpilot/reduction':
         specifier: workspace:*
-        version: link:../../features/reduction
+        version: link:../../packages/features/reduction
 
   components/tokenpilot/products/cli:
     dependencies:
