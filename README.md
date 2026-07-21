@@ -372,9 +372,9 @@ LightMem2/
 │   ├── presets/
 │   │   └── tokenpilot/           # Stabilizer + Reduction + Eviction composition contract
 │   ├── adapters/
-│   │   ├── openclaw/             # full TokenPilot host binding
-│   │   ├── codex/                # Stabilizer + Reduction via hooks and local proxy
-│   │   └── claude-code/          # Stabilizer + Reduction via local gateway
+│   |   ├── openclaw/             # OpenClaw adapter
+│   │   ├── codex/                # Codex CLI adapter
+│   │   └── claude-code/          # Claude Code adapter
 │   └── products/
 │       ├── cli/                  # shared lightmem2 CLI and browser visual launcher
 │       └── mcp/                  # shared memory_fault_recover MCP server
