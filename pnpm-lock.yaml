@@ -108,7 +108,7 @@ importers:
         version: link:../../packages/kernel
       '@tokenpilot/memory':
         specifier: workspace:*
-        version: link:../../packages/layers/memory
+        version: link:../../packages/features/memory
       '@tokenpilot/product-surface':
         specifier: workspace:*
         version: link:../../packages/product-surface
@@ -143,6 +143,8 @@ importers:
       '@tokenpilot/kernel':
         specifier: workspace:*
         version: link:../../kernel
+
+  components/tokenpilot/packages/features/memory: {}
 
   components/tokenpilot/packages/features/reduction:
     dependencies:
@@ -199,12 +201,6 @@ importers:
       '@tokenpilot/kernel':
         specifier: workspace:*
         version: link:../../kernel
-
-  components/tokenpilot/packages/layers/memory:
-    dependencies:
-      '@tokenpilot/history':
-        specifier: workspace:*
-        version: link:../history
 
   components/tokenpilot/packages/product-surface:
     dependencies:

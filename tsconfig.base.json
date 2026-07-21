@@ -25,7 +25,7 @@
                 "components/tokenpilot/packages/layers/history/src/index.ts"
             ],
             "@tokenpilot/memory": [
-                "components/tokenpilot/packages/layers/memory/src/index.ts"
+                "components/tokenpilot/packages/features/memory/src/index.ts"
             ],
             "@tokenpilot/runtime-core": [
                 "components/tokenpilot/packages/runtime-core/src/index.ts"
