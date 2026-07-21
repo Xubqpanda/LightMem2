@@ -1,7 +1,7 @@
 import type { RuntimeTurnContext } from "@lightmem2/kernel";
 import type { PersistedMessageKind, PersistedMessageOrigin, PersistedMessageRole } from "@lightmem2/kernel";
 
-// Inlined from @tokenpilot/layer-context (being removed)
+// Inlined from the retired layer-context package.
 export type ContextViewMessageSnapshot = {
   messageId: string;
   branchId: string;
