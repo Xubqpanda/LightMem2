@@ -485,8 +485,8 @@ test("installCodexTokenPilot stops an existing daemon before resolving the proxy
 });
 
 test("resolveCodexHookCommandForInstall finds the adapter root from the bundled CLI tree", async () => {
-  const repoRoot = resolve(__dirname, "..", "..", "..", "..", "..");
-  const bundledCliModuleDir = join(repoRoot, "components", "tokenpilot", "products", "cli", "dist");
+  const repoRoot = resolve(__dirname, "..", "..", "..", "..");
+  const bundledCliModuleDir = join(repoRoot, "components", "products", "cli", "dist");
   const originalCwd = process.cwd();
   try {
     process.chdir(dirname(repoRoot));

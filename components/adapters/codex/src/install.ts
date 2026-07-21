@@ -174,7 +174,7 @@ function adapterRootFromHere(moduleDir = __dirname): string {
   }
   let current = resolve(moduleDir, "..");
   for (let i = 0; i < 10; i += 1) {
-    const nested = join(current, "components", "tokenpilot", "adapters", "codex");
+    const nested = join(current, "components", "adapters", "codex");
     if (isCodexAdapterRoot(nested)) {
       return nested;
     }
@@ -185,11 +185,11 @@ function adapterRootFromHere(moduleDir = __dirname): string {
     if (isCodexAdapterRoot(current)) {
       return current;
     }
-    const nested = join(current, "components", "tokenpilot", "adapters", "codex");
+    const nested = join(current, "components", "adapters", "codex");
     if (isCodexAdapterRoot(nested)) return nested;
     current = dirname(current);
   }
-  return join(process.cwd(), "components", "tokenpilot", "adapters", "codex");
+  return join(process.cwd(), "components", "adapters", "codex");
 }
 
 function shellQuote(value: string): string {
