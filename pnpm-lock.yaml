@@ -18,6 +18,12 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  components/packages/foundation/history:
+    dependencies:
+      '@tokenpilot/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
   components/packages/foundation/kernel: {}
 
   components/tokenpilot/adapters/claude-code:
@@ -101,7 +107,7 @@ importers:
         version: link:../../packages/features/eviction
       '@tokenpilot/history':
         specifier: workspace:*
-        version: link:../../packages/foundation/history
+        version: link:../../../packages/foundation/history
       '@tokenpilot/host-adapter':
         specifier: workspace:*
         version: link:../../packages/foundation/host-adapter
@@ -141,7 +147,7 @@ importers:
         version: link:../../foundation/artifact-store
       '@tokenpilot/history':
         specifier: workspace:*
-        version: link:../../foundation/history
+        version: link:../../../../packages/foundation/history
       '@tokenpilot/kernel':
         specifier: workspace:*
         version: link:../../../../packages/foundation/kernel
@@ -174,12 +180,6 @@ importers:
       '@tokenpilot/host-adapter':
         specifier: workspace:*
         version: link:../host-adapter
-
-  components/tokenpilot/packages/foundation/history:
-    dependencies:
-      '@tokenpilot/kernel':
-        specifier: workspace:*
-        version: link:../../../../packages/foundation/kernel
 
   components/tokenpilot/packages/foundation/host-adapter:
     dependencies:
@@ -215,7 +215,7 @@ importers:
         version: link:../../packages/features/eviction
       '@tokenpilot/history':
         specifier: workspace:*
-        version: link:../../packages/foundation/history
+        version: link:../../../packages/foundation/history
       '@tokenpilot/kernel':
         specifier: workspace:*
         version: link:../../../packages/foundation/kernel
