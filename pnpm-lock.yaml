@@ -94,6 +94,24 @@ importers:
         specifier: workspace:*
         version: link:../kernel
 
+  components/presets/tokenpilot:
+    dependencies:
+      '@tokenpilot/eviction':
+        specifier: workspace:*
+        version: link:../../packages/features/eviction
+      '@tokenpilot/history':
+        specifier: workspace:*
+        version: link:../../packages/foundation/history
+      '@tokenpilot/kernel':
+        specifier: workspace:*
+        version: link:../../packages/foundation/kernel
+      '@tokenpilot/reduction':
+        specifier: workspace:*
+        version: link:../../packages/features/reduction
+      '@tokenpilot/runtime-core':
+        specifier: workspace:*
+        version: link:../../packages/foundation/runtime-core
+
   components/tokenpilot/adapters/claude-code:
     dependencies:
       '@tokenpilot/artifact-store':
@@ -169,7 +187,7 @@ importers:
         version: link:../../../packages/foundation/artifact-store
       '@tokenpilot/decision':
         specifier: workspace:*
-        version: link:../../presets/tokenpilot
+        version: link:../../../presets/tokenpilot
       '@tokenpilot/eviction':
         specifier: workspace:*
         version: link:../../../packages/features/eviction
@@ -207,24 +225,6 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
-
-  components/tokenpilot/presets/tokenpilot:
-    dependencies:
-      '@tokenpilot/eviction':
-        specifier: workspace:*
-        version: link:../../../packages/features/eviction
-      '@tokenpilot/history':
-        specifier: workspace:*
-        version: link:../../../packages/foundation/history
-      '@tokenpilot/kernel':
-        specifier: workspace:*
-        version: link:../../../packages/foundation/kernel
-      '@tokenpilot/reduction':
-        specifier: workspace:*
-        version: link:../../../packages/features/reduction
-      '@tokenpilot/runtime-core':
-        specifier: workspace:*
-        version: link:../../../packages/foundation/runtime-core
 
   components/tokenpilot/products/cli:
     dependencies:
