@@ -25,7 +25,7 @@ import {
 import { startClaudeCodeGatewayRuntime } from "../src/gateway-runtime.js";
 import { installClaudeCodeTokenPilot } from "../src/install.js";
 import { createConsoleLogger } from "../src/logger.js";
-import { createClaudeCodeCliBridge } from "../../../products/cli/src/hosts/claude-code.js";
+import { createClaudeCodeCliBridge } from "../../../../products/cli/src/hosts/claude-code.js";
 
 function extractToolResultText(block: Record<string, unknown> | undefined): string {
   if (!block) return "";
