@@ -86,6 +86,20 @@ Current preset bindings:
 
 At the repository level, the framework name is `LightMem2`.
 
+Workspace npm packages use the `@lightmem2` scope:
+
+| Layer | Package identities |
+| :-- | :-- |
+| Foundation | `@lightmem2/kernel`, `@lightmem2/runtime-core`, `@lightmem2/host-adapter`, `@lightmem2/history`, `@lightmem2/artifact-store`, `@lightmem2/product-surface` |
+| Features | `@lightmem2/stabilizer`, `@lightmem2/reduction`, `@lightmem2/eviction`, `@lightmem2/memory` |
+| Preset | `@lightmem2/tokenpilot` |
+| Products | `@lightmem2/cli`, `@lightmem2/mcp` |
+| Adapters | `@lightmem2/tokenpilot-openclaw`, `@lightmem2/codex-adapter`, `@lightmem2/claude-code-adapter` |
+
+These names define workspace ownership. They do not imply that every internal
+package is independently published; release entrypoints and their public
+export contracts are versioned separately.
+
 At the current runtime-compatibility layer, the shipped component still uses
 the established `tokenpilot` namespace for plugin id and persisted state. On
 OpenClaw, the current public session model prefix is `lightmem2/<model>`, while
