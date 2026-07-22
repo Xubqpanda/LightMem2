@@ -1,7 +1,7 @@
 {
-  "name": "@lightmem2/tokenpilot-openclaw",
+  "name": "@lightmem2/openclaw-adapter",
   "version": "0.1.0",
-  "description": "TokenPilot plugin for OpenClaw: routing hooks and token-efficiency runtime controls.",
+  "description": "LightMem2 adapter for OpenClaw, currently binding the TokenPilot preset.",
   "lightmem2": {
     "role": "adapter"
   },

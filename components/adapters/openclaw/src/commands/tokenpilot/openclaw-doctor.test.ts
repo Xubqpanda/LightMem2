@@ -6,7 +6,7 @@ import test from "node:test";
 import { formatOpenClawDoctorReport, inspectOpenClawDoctor } from "./openclaw-doctor.js";
 
 function makeTempRoot(): string {
-  return mkdtempSync(join(tmpdir(), "tokenpilot-openclaw-doctor-"));
+  return mkdtempSync(join(tmpdir(), "lightmem2-openclaw-adapter-doctor-"));
 }
 
 function baseConfig(stateRoot: string): Record<string, unknown> {

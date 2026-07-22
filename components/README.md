@@ -94,7 +94,7 @@ Workspace npm packages use the `@lightmem2` scope:
 | Features | `@lightmem2/stabilizer`, `@lightmem2/reduction`, `@lightmem2/eviction`, `@lightmem2/memory` |
 | Preset | `@lightmem2/tokenpilot` |
 | Products | `@lightmem2/cli`, `@lightmem2/mcp` |
-| Adapters | `@lightmem2/tokenpilot-openclaw`, `@lightmem2/codex-adapter`, `@lightmem2/claude-code-adapter` |
+| Adapters | `@lightmem2/openclaw-adapter`, `@lightmem2/codex-adapter`, `@lightmem2/claude-code-adapter` |
 
 These names define workspace ownership. They do not imply that every internal
 package is independently published; release entrypoints and their public

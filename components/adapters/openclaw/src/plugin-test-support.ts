@@ -65,7 +65,7 @@ import {
   readVisualSessionList,
 } from "@lightmem2/product-surface";
 
-export const TEST_WORKSPACE_DIR = "/tmp/tokenpilot-openclaw-plugin-tests";
+export const TEST_WORKSPACE_DIR = "/tmp/lightmem2-openclaw-adapter-plugin-tests";
 
 function contextSafeRecovery(details: unknown): Record<string, unknown> | undefined {
   return importedContextSafeRecovery(details, asRecord);
